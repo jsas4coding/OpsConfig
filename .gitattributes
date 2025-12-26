@@ -1,0 +1,73 @@
+# Git attributes for Go projects
+# https://git-scm.com/docs/gitattributes
+
+# Auto detect text files and normalize line endings to LF
+* text=auto eol=lf
+
+# Go files
+*.go text eol=lf diff=golang
+
+# Shell scripts
+*.sh text eol=lf
+
+# Batch files (Windows)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Configuration files
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.xml text eol=lf
+*.ini text eol=lf
+
+# Documentation
+*.md text eol=lf diff=markdown
+*.txt text eol=lf
+LICENSE text eol=lf
+
+# Docker
+Dockerfile text eol=lf
+*.dockerfile text eol=lf
+docker-compose*.yml text eol=lf
+docker-compose*.yaml text eol=lf
+
+# Makefile
+Makefile text eol=lf
+*.mk text eol=lf
+
+# SQL
+*.sql text eol=lf
+
+# Proto
+*.proto text eol=lf
+
+# Web files (if applicable)
+*.html text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tar binary
+*.7z binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+*.eot binary
+
+# Prevent showing generated files in diff
+go.sum -diff
+package-lock.json -diff
+
+# Linguist overrides for GitHub
+*.go linguist-language=Go

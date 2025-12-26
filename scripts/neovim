@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# =============================================================================
+# NEOVIM WRAPPER SCRIPT
+# =============================================================================
+# Activates the Neovim Python environment before launching Neovim.
+# This ensures Python-based plugins (pynvim) work correctly without
+# polluting the global shell environment.
+# =============================================================================
+
+set -euo pipefail
+
+# Python environment path
+NPYTHON_PATH="${OPSCONFIG_PYTHON_LIB_PATH:-${HOME}/.config/opsconfig/lib/python}"
+
+# Activate Python environment if it exists
+if [[ -f "${NPYTHON_PATH}/bin/activate" ]]; then
+    # shellcheck disable=SC1091
+    source "${NPYTHON_PATH}/bin/activate"
+fi
+
+# Execute Neovim with all arguments
+exec /opt/nvim/bin/nvim "$@"

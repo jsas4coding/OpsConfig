@@ -1,0 +1,48 @@
+{
+  "name": "opsconfig",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Curated and modular dotfiles collection for operational excellence",
+  "author": {
+    "name": "Jonatas Sas",
+    "email": "hi@jsas.dev"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/jsas4coding/ops-config#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jsas4coding/ops-config.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jsas4coding/ops-config/issues"
+  },
+  "keywords": [
+    "dotfiles",
+    "neovim",
+    "bash",
+    "tmux",
+    "configuration",
+    "server",
+    "opsconfig"
+  ],
+  "scripts": {
+    "format": "prettier --write \"**/*.{md,yaml,yml,json}\"",
+    "format:check": "prettier --check \"**/*.{md,yaml,yml,json}\"",
+    "lint": "eslint .",
+    "lint:fix": "eslint --fix ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "@redocly/cli": "^2.12.6",
+    "eslint": "^9.15.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-jsonc": "^2.18.2",
+    "eslint-plugin-markdown": "^5.1.0",
+    "eslint-plugin-yml": "^1.15.0",
+    "globals": "^15.12.0",
+    "prettier": "^3.4.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

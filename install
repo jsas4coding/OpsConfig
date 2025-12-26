@@ -1,0 +1,320 @@
+#!/usr/bin/env bash
+
+RED="\e[31m"
+GREEN="\e[32m"
+YELLOW="\e[33m"
+CYAN="\e[36m"
+WHITE="\e[97m"
+MAGENTA="\e[35m"
+RESET="\e[0m"
+
+# ASCII-compatible icons for maximum terminal support
+SUCCESS_ICON="[OK] "
+ERROR_ICON="[ERR] "
+WARNING_ICON="[WARN] "
+INFO_ICON="[INFO] "
+DOWNLOAD_ICON="[DL] "
+DELETE_ICON="[DEL] "
+GIT_ICON="[GIT] "
+
+msg() {
+  local type="$1"
+  local text="$2"
+  local icon=""
+  local color=""
+
+  case "$type" in
+    success)
+      icon="$SUCCESS_ICON"
+      color="$GREEN"
+      ;;
+    error)
+      icon="$ERROR_ICON"
+      color="$RED"
+      ;;
+    warning)
+      icon="$WARNING_ICON"
+      color="$YELLOW"
+      ;;
+    info)
+      icon="$INFO_ICON"
+      color="$CYAN"
+      ;;
+    download)
+      icon="$DOWNLOAD_ICON"
+      color="$WHITE"
+      ;;
+    delete)
+      icon="$DELETE_ICON"
+      color="$RED"
+      ;;
+    git)
+      icon="$GIT_ICON"
+      color="$MAGENTA"
+      ;;
+    *)
+      icon=" "
+      color="$WHITE"
+      ;;
+  esac
+
+  echo -e "${color}${icon}${text}${RESET}"
+}
+
+CONFIG_DIR="${HOME}/.config/opsconfig"
+LIB_DIR="${CONFIG_DIR}/lib"
+NPYTHON_DIR="${LIB_DIR}/python"
+NODE_DIR="${LIB_DIR}/node"
+
+mkdir -p "${CONFIG_DIR}"
+mkdir -p "${LIB_DIR}"
+
+if [[ $EUID -eq 0 ]]; then
+  msg info "Installing required packages..."
+
+  sudo apt install -y git curl jq stow ripgrep perl ruby-full build-essential clang python3-venv
+
+  msg info "Installing Neovim globally..."
+
+  NVIM_URL="https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz"
+  NVIM_DEST="/opt/nvim"
+  NVIM_TAR="nvim-linux-x86_64.tar.gz"
+  NVIM_TMP="/opt/nvim-linux-x86_64"
+
+  curl -LO "${NVIM_URL}"
+  sudo rm -rf "${NVIM_DEST}"
+  sudo tar -C /opt -xzf "${NVIM_TAR}"
+  sudo mv "${NVIM_TMP}" "${NVIM_DEST}"
+  sudo rm -rf "${NVIM_TAR}"
+
+  /opt/nvim/bin/nvim --version
+
+  ENV_FILE="/etc/environment"
+  NVIM_PATH="/opt/nvim/bin"
+
+  if ! grep -qE "^PATH=.*${NVIM_PATH}" "${ENV_FILE}"; then
+    msg info "Adding Neovim to PATH..."
+    sudo sed -i "/^PATH=/ s|\"$|:${NVIM_PATH}\"|" "${ENV_FILE}"
+  fi
+
+  if ! grep -q "^OPSCONFIG_TYPE=" "${ENV_FILE}"; then
+    echo "OPSCONFIG_TYPE=servers" | sudo tee -a "${ENV_FILE}" >/dev/null
+  fi
+
+  # Install Neovim wrapper script
+  msg info "Installing Neovim wrapper script..."
+  SCRIPTS_DIR="/var/scripts"
+  sudo mkdir -p "${SCRIPTS_DIR}"
+  sudo cp "${HOME}/.opsconfig/scripts/neovim" "${SCRIPTS_DIR}/neovim"
+  sudo chmod +x "${SCRIPTS_DIR}/neovim"
+
+  # Add /var/scripts to PATH if not already present
+  if ! grep -qE "^PATH=.*${SCRIPTS_DIR}" "${ENV_FILE}"; then
+    msg info "Adding scripts directory to PATH..."
+    sudo sed -i "/^PATH=/ s|\"$|:${SCRIPTS_DIR}\"|" "${ENV_FILE}"
+  fi
+
+  msg success "Neovim wrapper installed at ${SCRIPTS_DIR}/neovim"
+fi
+
+if [[ ! -d "$HOME/.fzf" ]]; then
+  msg download "Installing fzf..."
+  git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
+  ~/.fzf/install --all
+else
+  msg info "Updating fzf..."
+  cd ~/.fzf && git pull && ./install --all
+fi
+
+FORCE_PYTHON_SETUP=false
+[[ $1 == "--force" ]] && FORCE_PYTHON_SETUP=true
+
+update_python() {
+  msg refresh "Checking Neovim Python environment..."
+
+  local npython_dir="${NPYTHON_DIR}"
+  local python_bin="$npython_dir/bin/python3"
+
+  if [[ -d ${npython_dir} && ${FORCE_PYTHON_SETUP} != true ]]; then
+    msg info "Python environment already exists at ${npython_dir}, skipping setup."
+    return 0
+  fi
+
+  msg warning "Setting up Python environment..."
+  rm -rf "${npython_dir}" && mkdir -p "${npython_dir}"
+
+  if ! command -v python3 &>/dev/null; then
+    msg error "Python3 not found. Install Python3 before proceeding."
+    return 1
+  fi
+
+  python3 -m venv "$npython_dir"
+  source "$npython_dir/bin/activate"
+
+  msg info "Installing Neovim Python packages..."
+  python -m ensurepip --upgrade
+  pip install --upgrade pip
+  pip install neovim tasklib pynvim requests flask black numpy pandas nginxfmt
+  deactivate
+
+  msg success "Python environment set up at ${npython_dir}"
+}
+
+update_python "$@"
+
+update_node() {
+  msg search "Checking the latest NVM version..."
+
+  NVM_VERSION=$(curl -sL https://api.github.com/repos/nvm-sh/nvm/releases/latest | jq -r ".tag_name")
+
+  if [ -n "${NVM_VERSION}" ]; then
+    msg download "Installing the latest NVM version (${NVM_VERSION})..."
+
+    if curl -o- "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" | bash; then
+      msg success "NVM updated successfully."
+
+      export NVM_DIR="${HOME}/.nvm"
+
+      [ -s "${NVM_DIR}/nvm.sh" ] && . "${NVM_DIR}/nvm.sh"
+
+      nvm install v22
+      nvm alias default v22
+      nvm use default >/dev/null 2>&1
+
+      NODE_SYMLINK="${NODE_DIR}"
+
+      if [ -L "${NODE_SYMLINK}" ] || [ -e "${NODE_SYMLINK}" ]; then
+        msg warning "Removing existing symlink: ${NODE_SYMLINK}"
+
+        unlink "${NODE_SYMLINK}"
+      fi
+
+      ln -s "$(dirname "$(which node)")" "${NODE_SYMLINK}"
+
+      if [[ $EUID -eq 0 ]]; then
+        if ! grep -qE "^PATH=.*${NODE_DIR}" "${ENV_FILE}"; then
+          msg info "Adding Node to PATH..."
+
+          sudo sed -i "/^PATH=/ s|\"$|:${NODE_DIR}\"|" "${ENV_FILE}"
+        fi
+      fi
+
+      msg success "Symlink created: ${NODE_SYMLINK} → $(dirname "$(which node)")"
+    else
+      msg error "Failed to update NVM."
+    fi
+  else
+    msg error "Failed to get the latest NVM version."
+  fi
+}
+
+update_node
+
+update_nerd_font() {
+  FONT_NAME="$1"
+  FONT_URL="$2"
+  FONT_DIR="${HOME}/.local/share/fonts"
+  TEMP_DIR="$(mktemp -d)"
+  HASH_FILE="${CONFIG_DIR}/${FONT_NAME}.hash"
+
+  if [[ -f ${HASH_FILE} ]]; then
+    OLD_HASH=$(cat "${HASH_FILE}")
+  else
+    OLD_HASH=""
+  fi
+
+  mkdir -p "${FONT_DIR}"
+
+  msg download "Downloading ${FONT_NAME} Nerd Font..."
+
+  wget -q --show-progress -O "${TEMP_DIR}/${FONT_NAME}.zip" "${FONT_URL}"
+
+  NEW_HASH=$(sha256sum "${TEMP_DIR}/${FONT_NAME}.zip" | awk '{print $1}')
+
+  if [[ ${OLD_HASH} == "${NEW_HASH}" ]]; then
+    msg info "No updates found for ${FONT_NAME}. Skipping installation."
+
+    rm -rf "${TEMP_DIR}"
+
+    return
+  fi
+
+  msg info "Extracting font files..."
+
+  unzip -q "${TEMP_DIR}/${FONT_NAME}.zip" -d "${TEMP_DIR}"
+
+  msg info "Moving fonts to ${FONT_DIR}..."
+
+  mv -vf "${TEMP_DIR}"/*.ttf "${FONT_DIR}/"
+
+  msg info "Updating font cache..."
+
+  fc-cache -fv
+
+  echo "${NEW_HASH}" >"${HASH_FILE}"
+
+  msg success "${FONT_NAME} Nerd Font successfully updated!"
+}
+
+update_nerd_font "JetBrainsMono" "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip"
+update_nerd_font "FiraCode" "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/FiraCode.zip"
+
+if [[ -d "$HOME/.SpaceVim" ]]; then
+  msg delete "Removing SpaceVim..."
+  curl -sLf https://spacevim.org/install.sh | bash -s -- --uninstall
+  rm -rf "${HOME}/.SpaceVim" "${HOME}/.SpaceVim.d"
+  unlink "${HOME}/.nvim" 2>/dev/null
+  unlink "${HOME}/.vim" 2>/dev/null
+fi
+
+msg delete "Removing old configurations..."
+
+FILES=(
+  "${HOME}/.bashrc"
+  "${HOME}/.bash_aliases"
+  "${HOME}/.bash_custom"
+  "${HOME}/.bash_logout"
+  "${HOME}/.bash_ps1"
+  "${HOME}/.config/nvim"
+  "${HOME}/.config/vim"
+  "${HOME}/.vim"
+  "${HOME}/.vimrc"
+)
+
+for FILE in "${FILES[@]}"; do
+  [[ -L ${FILE} || -e ${FILE} ]] && rm -rf "${FILE}"
+done
+
+msg git "Configuring OpsConfig repository..."
+
+[[ -d "$HOME/.opsconfig" ]] && rm -rf "$HOME/.opsconfig"
+
+git clone https://github.com/jsas4coding/ops-config.git "${HOME}/.opsconfig"
+
+msg git "Applying stow to OpsConfig repository..."
+
+cd "${HOME}/.opsconfig" || exit
+
+BASH_ENV_LOCAL="${HOME}/.config/opsconfig/.bash_env_local"
+PHP_VERSION_FILE="${HOME}/.config/opsconfig/.php"
+
+if [[ ! -f ${BASH_ENV_LOCAL} ]]; then
+  server_name=$(whiptail --inputbox "Enter the server name:" 8 50 --title "Configuration" 3>&1 1>&2 2>&3)
+  echo "SERVER_NAME=\"${server_name}\"" >"${BASH_ENV_LOCAL}"
+  msg success "Saved ${server_name} to .bash_env_local"
+else
+  msg info ".bash_env_local already exists, skipping creation."
+fi
+
+if [[ ! -f ${PHP_VERSION_FILE} ]]; then
+  php_version=$(whiptail --inputbox "Enter the default PHP CLI version (e.g., 8.1):" 8 50 --title "Configuration" 3>&1 1>&2 2>&3)
+  echo "${php_version}" >"${PHP_VERSION_FILE}"
+  msg success "Saved PHP CLI (${php_version}) version to .php"
+else
+  msg info ".php already exists, skipping creation."
+fi
+
+stow bash
+stow nvim
+
+msg success "Installation completed!"

@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+bin/
+dist/
+vendor/
+
+# Go files (formatted by gofmt)
+*.go
+
+# Generated files
+go.sum
+package-lock.json
+
+# Coverage
+coverage/
+coverage.out
+
+# IDE
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temp files
+tmp/
+.tmp/
