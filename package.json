@@ -1,6 +1,6 @@
 {
   "name": "opsconfig",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "description": "Curated and modular dotfiles collection for operational excellence",
   "author": {
