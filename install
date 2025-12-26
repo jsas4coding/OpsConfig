@@ -1,4 +1,16 @@
 #!/usr/bin/env bash
+# =============================================================================
+# OpsConfig Installation Script
+# =============================================================================
+# A curated and modular dotfiles collection for operational excellence.
+# Repository: https://github.com/jsas4coding/OpsConfig
+# =============================================================================
+
+set -euo pipefail
+
+# =============================================================================
+# COLORS AND ICONS
+# =============================================================================
 
 RED="\e[31m"
 GREEN="\e[32m"
@@ -8,7 +20,6 @@ WHITE="\e[97m"
 MAGENTA="\e[35m"
 RESET="\e[0m"
 
-# ASCII-compatible icons for maximum terminal support
 SUCCESS_ICON="[OK] "
 ERROR_ICON="[ERR] "
 WARNING_ICON="[WARN] "
@@ -16,6 +27,7 @@ INFO_ICON="[INFO] "
 DOWNLOAD_ICON="[DL] "
 DELETE_ICON="[DEL] "
 GIT_ICON="[GIT] "
+CONFIG_ICON="[CFG] "
 
 msg() {
   local type="$1"
@@ -24,297 +36,513 @@ msg() {
   local color=""
 
   case "$type" in
-    success)
-      icon="$SUCCESS_ICON"
-      color="$GREEN"
-      ;;
-    error)
-      icon="$ERROR_ICON"
-      color="$RED"
-      ;;
-    warning)
-      icon="$WARNING_ICON"
-      color="$YELLOW"
-      ;;
-    info)
-      icon="$INFO_ICON"
-      color="$CYAN"
-      ;;
-    download)
-      icon="$DOWNLOAD_ICON"
-      color="$WHITE"
-      ;;
-    delete)
-      icon="$DELETE_ICON"
-      color="$RED"
-      ;;
-    git)
-      icon="$GIT_ICON"
-      color="$MAGENTA"
-      ;;
-    *)
-      icon=" "
-      color="$WHITE"
-      ;;
+    success) icon="$SUCCESS_ICON"; color="$GREEN" ;;
+    error) icon="$ERROR_ICON"; color="$RED" ;;
+    warning) icon="$WARNING_ICON"; color="$YELLOW" ;;
+    info) icon="$INFO_ICON"; color="$CYAN" ;;
+    download) icon="$DOWNLOAD_ICON"; color="$WHITE" ;;
+    delete) icon="$DELETE_ICON"; color="$RED" ;;
+    git) icon="$GIT_ICON"; color="$MAGENTA" ;;
+    config) icon="$CONFIG_ICON"; color="$CYAN" ;;
+    *) icon=" "; color="$WHITE" ;;
   esac
 
   echo -e "${color}${icon}${text}${RESET}"
 }
 
+# =============================================================================
+# PATHS AND DIRECTORIES
+# =============================================================================
+
 CONFIG_DIR="${HOME}/.config/opsconfig"
+CONFIG_FILE="${CONFIG_DIR}/config"
 LIB_DIR="${CONFIG_DIR}/lib"
 NPYTHON_DIR="${LIB_DIR}/python"
 NODE_DIR="${LIB_DIR}/node"
+OPSCONFIG_REPO="${HOME}/.opsconfig"
 
 mkdir -p "${CONFIG_DIR}"
 mkdir -p "${LIB_DIR}"
 
-if [[ $EUID -eq 0 ]]; then
+# =============================================================================
+# CONFIGURATION DEFAULTS
+# =============================================================================
+
+DEFAULT_SERVER_NAME="$(hostname)"
+DEFAULT_PHP_VERSION=""
+DEFAULT_NODE_VERSION="22"
+DEFAULT_INSTALL_FONTS="true"
+DEFAULT_FONTS="JetBrainsMono FiraCode"
+DEFAULT_INSTALL_FZF="true"
+DEFAULT_INSTALL_PYTHON_ENV="true"
+DEFAULT_PYTHON_PACKAGES="neovim tasklib pynvim requests black"
+
+# =============================================================================
+# CONFIGURATION FUNCTIONS
+# =============================================================================
+
+load_config() {
+  if [[ -f "${CONFIG_FILE}" ]]; then
+    # shellcheck disable=SC1090
+    source "${CONFIG_FILE}"
+    msg info "Configuration loaded from ${CONFIG_FILE}"
+    return 0
+  fi
+  return 1
+}
+
+save_config() {
+  cat > "${CONFIG_FILE}" << EOF
+# =============================================================================
+# OpsConfig Configuration
+# =============================================================================
+# This file is auto-generated. You can edit it manually.
+# Location: ${CONFIG_FILE}
+# =============================================================================
+
+# Server identification (displayed in shell prompt)
+SERVER_NAME="${SERVER_NAME}"
+
+# PHP CLI version (e.g., 8.1, 8.2, 8.3)
+PHP_VERSION="${PHP_VERSION}"
+
+# Node.js version to install via fnm
+NODE_VERSION="${NODE_VERSION}"
+
+# Install Nerd Fonts (true/false)
+INSTALL_FONTS="${INSTALL_FONTS}"
+
+# Fonts to install (space-separated)
+FONTS="${FONTS}"
+
+# Install fzf fuzzy finder (true/false)
+INSTALL_FZF="${INSTALL_FZF}"
+
+# Install Python environment for Neovim (true/false)
+INSTALL_PYTHON_ENV="${INSTALL_PYTHON_ENV}"
+
+# Python packages to install (space-separated)
+PYTHON_PACKAGES="${PYTHON_PACKAGES}"
+EOF
+
+  chmod 644 "${CONFIG_FILE}"
+  msg success "Configuration saved to ${CONFIG_FILE}"
+
+  # Maintain backwards compatibility with .php file
+  if [[ -n "${PHP_VERSION}" ]]; then
+    echo "${PHP_VERSION}" > "${CONFIG_DIR}/.php"
+  fi
+
+  # Maintain backwards compatibility with .bash_env_local
+  echo "SERVER_NAME=\"${SERVER_NAME}\"" > "${CONFIG_DIR}/.bash_env_local"
+}
+
+ask_config() {
+  local var_name="$1"
+  local prompt="$2"
+  local default="$3"
+  local current_value="${!var_name:-}"
+
+  if [[ -n "${current_value}" ]]; then
+    default="${current_value}"
+  fi
+
+  local result
+  if command -v whiptail &>/dev/null; then
+    result=$(whiptail --inputbox "${prompt}" 8 60 "${default}" --title "OpsConfig Setup" 3>&1 1>&2 2>&3) || result="${default}"
+  else
+    echo -en "${CYAN}${prompt} [${default}]: ${RESET}"
+    read -r result
+    result="${result:-${default}}"
+  fi
+
+  printf -v "${var_name}" '%s' "${result}"
+}
+
+ask_yes_no() {
+  local var_name="$1"
+  local prompt="$2"
+  local default="$3"
+  local current_value="${!var_name:-}"
+
+  if [[ -n "${current_value}" ]]; then
+    default="${current_value}"
+  fi
+
+  local result
+  if command -v whiptail &>/dev/null; then
+    if whiptail --yesno "${prompt}" 8 60 --title "OpsConfig Setup" 3>&1 1>&2 2>&3; then
+      result="true"
+    else
+      result="false"
+    fi
+  else
+    local yn_default="Y/n"
+    [[ "${default}" == "false" ]] && yn_default="y/N"
+    echo -en "${CYAN}${prompt} [${yn_default}]: ${RESET}"
+    read -r answer
+    case "${answer,,}" in
+      y|yes) result="true" ;;
+      n|no) result="false" ;;
+      *) result="${default}" ;;
+    esac
+  fi
+
+  printf -v "${var_name}" '%s' "${result}"
+}
+
+run_config_wizard() {
+  msg config "Starting OpsConfig configuration wizard..."
+  echo ""
+
+  # Load existing config or use defaults
+  SERVER_NAME="${SERVER_NAME:-${DEFAULT_SERVER_NAME}}"
+  PHP_VERSION="${PHP_VERSION:-${DEFAULT_PHP_VERSION}}"
+  NODE_VERSION="${NODE_VERSION:-${DEFAULT_NODE_VERSION}}"
+  INSTALL_FONTS="${INSTALL_FONTS:-${DEFAULT_INSTALL_FONTS}}"
+  FONTS="${FONTS:-${DEFAULT_FONTS}}"
+  INSTALL_FZF="${INSTALL_FZF:-${DEFAULT_INSTALL_FZF}}"
+  INSTALL_PYTHON_ENV="${INSTALL_PYTHON_ENV:-${DEFAULT_INSTALL_PYTHON_ENV}}"
+  PYTHON_PACKAGES="${PYTHON_PACKAGES:-${DEFAULT_PYTHON_PACKAGES}}"
+
+  ask_config "SERVER_NAME" "Enter the server name (displayed in prompt):" "${SERVER_NAME}"
+  ask_config "PHP_VERSION" "Enter PHP CLI version (leave empty to skip):" "${PHP_VERSION}"
+  ask_config "NODE_VERSION" "Enter Node.js version to install:" "${NODE_VERSION}"
+  ask_yes_no "INSTALL_FONTS" "Install Nerd Fonts (JetBrains Mono, Fira Code)?" "${INSTALL_FONTS}"
+
+  if [[ "${INSTALL_FONTS}" == "true" ]]; then
+    ask_config "FONTS" "Fonts to install (space-separated):" "${FONTS}"
+  fi
+
+  ask_yes_no "INSTALL_FZF" "Install fzf fuzzy finder?" "${INSTALL_FZF}"
+  ask_yes_no "INSTALL_PYTHON_ENV" "Install Python environment for Neovim?" "${INSTALL_PYTHON_ENV}"
+
+  if [[ "${INSTALL_PYTHON_ENV}" == "true" ]]; then
+    ask_config "PYTHON_PACKAGES" "Python packages to install:" "${PYTHON_PACKAGES}"
+  fi
+
+  echo ""
+  save_config
+}
+
+# =============================================================================
+# INSTALLATION FUNCTIONS
+# =============================================================================
+
+install_system_packages() {
+  if [[ $EUID -ne 0 ]]; then
+    msg warning "Not running as root. Skipping system package installation."
+    return 0
+  fi
+
   msg info "Installing required packages..."
 
-  sudo apt install -y git curl jq stow ripgrep perl ruby-full build-essential clang python3-venv
+  # Core development tools
+  sudo apt install -y git curl wget jq stow ripgrep perl ruby-full build-essential clang python3-venv whiptail
+
+  # Server utilities
+  sudo apt install -y htop ncdu tree tmux fd-find unzip
+}
+
+install_neovim() {
+  if [[ $EUID -ne 0 ]]; then
+    msg warning "Not running as root. Skipping Neovim global installation."
+    return 0
+  fi
 
   msg info "Installing Neovim globally..."
 
-  NVIM_URL="https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz"
-  NVIM_DEST="/opt/nvim"
-  NVIM_TAR="nvim-linux-x86_64.tar.gz"
-  NVIM_TMP="/opt/nvim-linux-x86_64"
+  local nvim_url="https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz"
+  local nvim_dest="/opt/nvim"
+  local nvim_tar="nvim-linux-x86_64.tar.gz"
+  local nvim_tmp="/opt/nvim-linux-x86_64"
+  local env_file="/etc/environment"
+  local nvim_path="/opt/nvim/bin"
+  local scripts_dir="/var/scripts"
 
-  curl -LO "${NVIM_URL}"
-  sudo rm -rf "${NVIM_DEST}"
-  sudo tar -C /opt -xzf "${NVIM_TAR}"
-  sudo mv "${NVIM_TMP}" "${NVIM_DEST}"
-  sudo rm -rf "${NVIM_TAR}"
+  curl -LO "${nvim_url}"
+  sudo rm -rf "${nvim_dest}"
+  sudo tar -C /opt -xzf "${nvim_tar}"
+  sudo mv "${nvim_tmp}" "${nvim_dest}"
+  sudo rm -rf "${nvim_tar}"
 
   /opt/nvim/bin/nvim --version
 
-  ENV_FILE="/etc/environment"
-  NVIM_PATH="/opt/nvim/bin"
-
-  if ! grep -qE "^PATH=.*${NVIM_PATH}" "${ENV_FILE}"; then
+  if ! grep -qE "^PATH=.*${nvim_path}" "${env_file}"; then
     msg info "Adding Neovim to PATH..."
-    sudo sed -i "/^PATH=/ s|\"$|:${NVIM_PATH}\"|" "${ENV_FILE}"
+    sudo sed -i "/^PATH=/ s|\"$|:${nvim_path}\"|" "${env_file}"
   fi
 
-  if ! grep -q "^OPSCONFIG_TYPE=" "${ENV_FILE}"; then
-    echo "OPSCONFIG_TYPE=servers" | sudo tee -a "${ENV_FILE}" >/dev/null
+  if ! grep -q "^OPSCONFIG_TYPE=" "${env_file}"; then
+    echo "OPSCONFIG_TYPE=servers" | sudo tee -a "${env_file}" >/dev/null
   fi
 
   # Install Neovim wrapper script
   msg info "Installing Neovim wrapper script..."
-  SCRIPTS_DIR="/var/scripts"
-  sudo mkdir -p "${SCRIPTS_DIR}"
-  sudo cp "${HOME}/.opsconfig/scripts/neovim" "${SCRIPTS_DIR}/neovim"
-  sudo chmod +x "${SCRIPTS_DIR}/neovim"
+  sudo mkdir -p "${scripts_dir}"
+  sudo cp "${OPSCONFIG_REPO}/scripts/neovim" "${scripts_dir}/neovim"
+  sudo chmod +x "${scripts_dir}/neovim"
 
-  # Add /var/scripts to PATH if not already present
-  if ! grep -qE "^PATH=.*${SCRIPTS_DIR}" "${ENV_FILE}"; then
+  if ! grep -qE "^PATH=.*${scripts_dir}" "${env_file}"; then
     msg info "Adding scripts directory to PATH..."
-    sudo sed -i "/^PATH=/ s|\"$|:${SCRIPTS_DIR}\"|" "${ENV_FILE}"
+    sudo sed -i "/^PATH=/ s|\"$|:${scripts_dir}\"|" "${env_file}"
   fi
 
-  msg success "Neovim wrapper installed at ${SCRIPTS_DIR}/neovim"
-fi
+  msg success "Neovim installed at ${nvim_dest}"
+}
 
-if [[ ! -d "$HOME/.fzf" ]]; then
-  msg download "Installing fzf..."
-  git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
-  ~/.fzf/install --all
-else
-  msg info "Updating fzf..."
-  cd ~/.fzf && git pull && ./install --all
-fi
+install_fzf() {
+  if [[ "${INSTALL_FZF}" != "true" ]]; then
+    msg info "Skipping fzf installation (disabled in config)."
+    return 0
+  fi
 
-FORCE_PYTHON_SETUP=false
-[[ $1 == "--force" ]] && FORCE_PYTHON_SETUP=true
+  if [[ ! -d "$HOME/.fzf" ]]; then
+    msg download "Installing fzf..."
+    git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
+    ~/.fzf/install --all
+  else
+    msg info "Updating fzf..."
+    cd ~/.fzf && git pull && ./install --all
+    cd - > /dev/null
+  fi
+}
 
-update_python() {
-  msg refresh "Checking Neovim Python environment..."
+install_python_env() {
+  if [[ "${INSTALL_PYTHON_ENV}" != "true" ]]; then
+    msg info "Skipping Python environment (disabled in config)."
+    return 0
+  fi
 
-  local npython_dir="${NPYTHON_DIR}"
-  local python_bin="$npython_dir/bin/python3"
+  msg info "Checking Neovim Python environment..."
 
-  if [[ -d ${npython_dir} && ${FORCE_PYTHON_SETUP} != true ]]; then
-    msg info "Python environment already exists at ${npython_dir}, skipping setup."
+  local force_setup=false
+  [[ "${1:-}" == "--force" ]] && force_setup=true
+
+  if [[ -d "${NPYTHON_DIR}" && "${force_setup}" != true ]]; then
+    msg info "Python environment already exists at ${NPYTHON_DIR}, skipping setup."
     return 0
   fi
 
   msg warning "Setting up Python environment..."
-  rm -rf "${npython_dir}" && mkdir -p "${npython_dir}"
+  rm -rf "${NPYTHON_DIR}" && mkdir -p "${NPYTHON_DIR}"
 
   if ! command -v python3 &>/dev/null; then
     msg error "Python3 not found. Install Python3 before proceeding."
     return 1
   fi
 
-  python3 -m venv "$npython_dir"
-  source "$npython_dir/bin/activate"
+  python3 -m venv "${NPYTHON_DIR}"
+  # shellcheck disable=SC1091
+  source "${NPYTHON_DIR}/bin/activate"
 
-  msg info "Installing Neovim Python packages..."
+  msg info "Installing Python packages: ${PYTHON_PACKAGES}"
   python -m ensurepip --upgrade
   pip install --upgrade pip
-  pip install neovim tasklib pynvim requests flask black numpy pandas nginxfmt
+  # shellcheck disable=SC2086
+  pip install ${PYTHON_PACKAGES}
   deactivate
 
-  msg success "Python environment set up at ${npython_dir}"
+  msg success "Python environment set up at ${NPYTHON_DIR}"
 }
 
-update_python "$@"
+install_node() {
+  msg info "Setting up Node.js version manager..."
 
-update_node() {
-  msg search "Checking the latest NVM version..."
+  local fnm_dir="${HOME}/.local/share/fnm"
 
-  NVM_VERSION=$(curl -sL https://api.github.com/repos/nvm-sh/nvm/releases/latest | jq -r ".tag_name")
+  # Install fnm (Fast Node Manager)
+  if command -v fnm &>/dev/null || [[ -x "${fnm_dir}/fnm" ]]; then
+    msg info "fnm already installed."
+  else
+    msg download "Installing fnm (Fast Node Manager)..."
+    mkdir -p "${fnm_dir}"
+    local fnm_archive="fnm-linux.zip"
+    curl -fsSL "https://github.com/Schniz/fnm/releases/latest/download/${fnm_archive}" -o "/tmp/${fnm_archive}"
+    unzip -o "/tmp/${fnm_archive}" -d "${fnm_dir}"
+    chmod +x "${fnm_dir}/fnm"
+    rm -f "/tmp/${fnm_archive}"
+  fi
 
-  if [ -n "${NVM_VERSION}" ]; then
-    msg download "Installing the latest NVM version (${NVM_VERSION})..."
+  export PATH="${fnm_dir}:${PATH}"
 
-    if curl -o- "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" | bash; then
-      msg success "NVM updated successfully."
+  if command -v fnm &>/dev/null; then
+    eval "$(fnm env)"
 
-      export NVM_DIR="${HOME}/.nvm"
+    msg download "Installing Node.js v${NODE_VERSION}..."
+    fnm install "${NODE_VERSION}"
+    fnm default "${NODE_VERSION}"
+    fnm use "${NODE_VERSION}"
 
-      [ -s "${NVM_DIR}/nvm.sh" ] && . "${NVM_DIR}/nvm.sh"
+    msg success "fnm installed with Node.js v${NODE_VERSION}."
 
-      nvm install v22
-      nvm alias default v22
-      nvm use default >/dev/null 2>&1
-
-      NODE_SYMLINK="${NODE_DIR}"
-
-      if [ -L "${NODE_SYMLINK}" ] || [ -e "${NODE_SYMLINK}" ]; then
-        msg warning "Removing existing symlink: ${NODE_SYMLINK}"
-
-        unlink "${NODE_SYMLINK}"
-      fi
-
-      ln -s "$(dirname "$(which node)")" "${NODE_SYMLINK}"
-
-      if [[ $EUID -eq 0 ]]; then
-        if ! grep -qE "^PATH=.*${NODE_DIR}" "${ENV_FILE}"; then
-          msg info "Adding Node to PATH..."
-
-          sudo sed -i "/^PATH=/ s|\"$|:${NODE_DIR}\"|" "${ENV_FILE}"
-        fi
-      fi
-
-      msg success "Symlink created: ${NODE_SYMLINK} → $(dirname "$(which node)")"
-    else
-      msg error "Failed to update NVM."
+    # Create symlink for compatibility
+    if [ -L "${NODE_DIR}" ] || [ -e "${NODE_DIR}" ]; then
+      msg warning "Removing existing symlink: ${NODE_DIR}"
+      unlink "${NODE_DIR}"
     fi
+
+    local fnm_node_path
+    fnm_node_path="$(dirname "$(fnm exec --using="${NODE_VERSION}" which node)")"
+    ln -s "${fnm_node_path}" "${NODE_DIR}"
+
+    if [[ $EUID -eq 0 ]]; then
+      local env_file="/etc/environment"
+      if ! grep -qE "^PATH=.*${NODE_DIR}" "${env_file}"; then
+        msg info "Adding Node to PATH..."
+        sudo sed -i "/^PATH=/ s|\"$|:${NODE_DIR}\"|" "${env_file}"
+      fi
+    fi
+
+    msg success "Symlink created: ${NODE_DIR} → ${fnm_node_path}"
+    node --version
   else
-    msg error "Failed to get the latest NVM version."
+    msg error "Failed to install fnm."
   fi
 }
 
-update_node
-
-update_nerd_font() {
-  FONT_NAME="$1"
-  FONT_URL="$2"
-  FONT_DIR="${HOME}/.local/share/fonts"
-  TEMP_DIR="$(mktemp -d)"
-  HASH_FILE="${CONFIG_DIR}/${FONT_NAME}.hash"
-
-  if [[ -f ${HASH_FILE} ]]; then
-    OLD_HASH=$(cat "${HASH_FILE}")
-  else
-    OLD_HASH=""
+install_fonts() {
+  if [[ "${INSTALL_FONTS}" != "true" ]]; then
+    msg info "Skipping font installation (disabled in config)."
+    return 0
   fi
 
-  mkdir -p "${FONT_DIR}"
+  local font_dir="${HOME}/.local/share/fonts"
+  mkdir -p "${font_dir}"
 
-  msg download "Downloading ${FONT_NAME} Nerd Font..."
+  for font_name in ${FONTS}; do
+    local font_url="https://github.com/ryanoasis/nerd-fonts/releases/latest/download/${font_name}.zip"
+    local temp_dir
+    temp_dir="$(mktemp -d)"
+    local hash_file="${CONFIG_DIR}/${font_name}.hash"
 
-  wget -q --show-progress -O "${TEMP_DIR}/${FONT_NAME}.zip" "${FONT_URL}"
+    local old_hash=""
+    [[ -f "${hash_file}" ]] && old_hash=$(cat "${hash_file}")
 
-  NEW_HASH=$(sha256sum "${TEMP_DIR}/${FONT_NAME}.zip" | awk '{print $1}')
+    msg download "Downloading ${font_name} Nerd Font..."
 
-  if [[ ${OLD_HASH} == "${NEW_HASH}" ]]; then
-    msg info "No updates found for ${FONT_NAME}. Skipping installation."
+    if ! wget -q --show-progress -O "${temp_dir}/${font_name}.zip" "${font_url}"; then
+      msg error "Failed to download ${font_name}."
+      rm -rf "${temp_dir}"
+      continue
+    fi
 
-    rm -rf "${TEMP_DIR}"
+    local new_hash
+    new_hash=$(sha256sum "${temp_dir}/${font_name}.zip" | awk '{print $1}')
 
-    return
-  fi
+    if [[ "${old_hash}" == "${new_hash}" ]]; then
+      msg info "No updates found for ${font_name}. Skipping."
+      rm -rf "${temp_dir}"
+      continue
+    fi
 
-  msg info "Extracting font files..."
+    msg info "Extracting ${font_name}..."
+    unzip -q "${temp_dir}/${font_name}.zip" -d "${temp_dir}"
+    mv -f "${temp_dir}"/*.ttf "${font_dir}/" 2>/dev/null || true
 
-  unzip -q "${TEMP_DIR}/${FONT_NAME}.zip" -d "${TEMP_DIR}"
+    echo "${new_hash}" > "${hash_file}"
+    rm -rf "${temp_dir}"
 
-  msg info "Moving fonts to ${FONT_DIR}..."
-
-  mv -vf "${TEMP_DIR}"/*.ttf "${FONT_DIR}/"
+    msg success "${font_name} Nerd Font installed!"
+  done
 
   msg info "Updating font cache..."
-
-  fc-cache -fv
-
-  echo "${NEW_HASH}" >"${HASH_FILE}"
-
-  msg success "${FONT_NAME} Nerd Font successfully updated!"
+  fc-cache -f
 }
 
-update_nerd_font "JetBrainsMono" "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip"
-update_nerd_font "FiraCode" "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/FiraCode.zip"
+cleanup_legacy() {
+  # Remove SpaceVim if present
+  if [[ -d "$HOME/.SpaceVim" ]]; then
+    msg delete "Removing SpaceVim..."
+    rm -rf "${HOME}/.SpaceVim" "${HOME}/.SpaceVim.d"
+    unlink "${HOME}/.nvim" 2>/dev/null || true
+    unlink "${HOME}/.vim" 2>/dev/null || true
+  fi
 
-if [[ -d "$HOME/.SpaceVim" ]]; then
-  msg delete "Removing SpaceVim..."
-  curl -sLf https://spacevim.org/install.sh | bash -s -- --uninstall
-  rm -rf "${HOME}/.SpaceVim" "${HOME}/.SpaceVim.d"
-  unlink "${HOME}/.nvim" 2>/dev/null
-  unlink "${HOME}/.vim" 2>/dev/null
-fi
+  msg delete "Removing old configurations..."
 
-msg delete "Removing old configurations..."
+  local files=(
+    "${HOME}/.bashrc"
+    "${HOME}/.bash_aliases"
+    "${HOME}/.bash_custom"
+    "${HOME}/.bash_logout"
+    "${HOME}/.bash_ps1"
+    "${HOME}/.config/nvim"
+    "${HOME}/.config/vim"
+    "${HOME}/.vim"
+    "${HOME}/.vimrc"
+  )
 
-FILES=(
-  "${HOME}/.bashrc"
-  "${HOME}/.bash_aliases"
-  "${HOME}/.bash_custom"
-  "${HOME}/.bash_logout"
-  "${HOME}/.bash_ps1"
-  "${HOME}/.config/nvim"
-  "${HOME}/.config/vim"
-  "${HOME}/.vim"
-  "${HOME}/.vimrc"
-)
+  for file in "${files[@]}"; do
+    [[ -L "${file}" || -e "${file}" ]] && rm -rf "${file}"
+  done
+}
 
-for FILE in "${FILES[@]}"; do
-  [[ -L ${FILE} || -e ${FILE} ]] && rm -rf "${FILE}"
-done
+setup_repository() {
+  msg git "Configuring OpsConfig repository..."
 
-msg git "Configuring OpsConfig repository..."
+  [[ -d "${OPSCONFIG_REPO}" ]] && rm -rf "${OPSCONFIG_REPO}"
 
-[[ -d "$HOME/.opsconfig" ]] && rm -rf "$HOME/.opsconfig"
+  git clone https://github.com/jsas4coding/OpsConfig.git "${OPSCONFIG_REPO}"
 
-git clone https://github.com/jsas4coding/ops-config.git "${HOME}/.opsconfig"
+  msg git "Applying stow to OpsConfig repository..."
 
-msg git "Applying stow to OpsConfig repository..."
+  cd "${OPSCONFIG_REPO}" || exit
+  stow bash
+  stow nvim
+  cd - > /dev/null
+}
 
-cd "${HOME}/.opsconfig" || exit
+# =============================================================================
+# MAIN
+# =============================================================================
 
-BASH_ENV_LOCAL="${HOME}/.config/opsconfig/.bash_env_local"
-PHP_VERSION_FILE="${HOME}/.config/opsconfig/.php"
+main() {
+  local force_python=false
+  local skip_wizard=false
 
-if [[ ! -f ${BASH_ENV_LOCAL} ]]; then
-  server_name=$(whiptail --inputbox "Enter the server name:" 8 50 --title "Configuration" 3>&1 1>&2 2>&3)
-  echo "SERVER_NAME=\"${server_name}\"" >"${BASH_ENV_LOCAL}"
-  msg success "Saved ${server_name} to .bash_env_local"
-else
-  msg info ".bash_env_local already exists, skipping creation."
-fi
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --force) force_python=true ;;
+      --no-wizard) skip_wizard=true ;;
+      *) msg warning "Unknown option: $1" ;;
+    esac
+    shift
+  done
 
-if [[ ! -f ${PHP_VERSION_FILE} ]]; then
-  php_version=$(whiptail --inputbox "Enter the default PHP CLI version (e.g., 8.1):" 8 50 --title "Configuration" 3>&1 1>&2 2>&3)
-  echo "${php_version}" >"${PHP_VERSION_FILE}"
-  msg success "Saved PHP CLI (${php_version}) version to .php"
-else
-  msg info ".php already exists, skipping creation."
-fi
+  echo ""
+  msg info "=== OpsConfig Installation ==="
+  echo ""
 
-stow bash
-stow nvim
+  # Load existing config or run wizard
+  if load_config && [[ "${skip_wizard}" == "true" ]]; then
+    msg info "Using existing configuration."
+  elif ! load_config || [[ "${skip_wizard}" != "true" ]]; then
+    run_config_wizard
+  fi
 
-msg success "Installation completed!"
+  # Run installation steps
+  install_system_packages
+  cleanup_legacy
+  setup_repository
+  install_neovim
+  install_fzf
+  install_node
+
+  if [[ "${force_python}" == "true" ]]; then
+    install_python_env --force
+  else
+    install_python_env
+  fi
+
+  install_fonts
+
+  echo ""
+  msg success "=== OpsConfig Installation Complete ==="
+  msg info "Configuration saved at: ${CONFIG_FILE}"
+  msg info "Reload your shell: source ~/.bashrc"
+  echo ""
+}
+
+main "$@"

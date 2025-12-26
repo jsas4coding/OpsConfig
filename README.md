@@ -1,10 +1,14 @@
 # OpsConfig
 
-**OpsConfig** is a curated and modular dotfiles collection built for operational excellence, focusing on maintainability, extensibility, and productivity — especially for developers, sysadmins, and power users who rely heavily on terminal and Neovim workflows.
+**OpsConfig** is a curated and modular dotfiles collection built for operational excellence,
+focusing on maintainability, extensibility, and productivity — especially for developers, sysadmins,
+and power users who rely heavily on terminal and Neovim workflows.
 
-> **Warning**: This repository does not accept contributions. It is tailored for personal use and internal deployment.
+> **Warning**: This repository does not accept contributions. It is tailored for personal use and
+> internal deployment.
 >
-> **Disclaimer**: This configuration is designed for personal use. It **overwrites existing configurations** during installation.
+> **Disclaimer**: This configuration is designed for personal use. It **overwrites existing
+> configurations** during installation.
 
 ---
 
@@ -36,6 +40,7 @@
 ## Features
 
 ### Neovim
+
 - **Fast Completion**: blink.cmp with 0.5-4ms response time
 - **Fuzzy Finding**: fzf-lua for fast file and content search
 - **LSP Integration**: Mason-managed language servers (Bash, JSON, YAML, Lua)
@@ -45,6 +50,7 @@
 - **Treesitter**: Syntax highlighting for 40+ languages
 
 ### Bash
+
 - **Enhanced History**: 10,000 commands with timestamps and deduplication
 - **Smart Navigation**: Auto-cd, directory spell correction, globstar
 - **SSH-Aware Clipboard**: OSC52 passthrough for remote copy operations
@@ -52,6 +58,7 @@
 - **System Update**: Single command (`u`) updates everything
 
 ### TMUX
+
 - **Vi Mode**: Vim-style keybindings for copy mode
 - **OSC52 Passthrough**: Clipboard works through SSH tunnels
 - **True Color**: Full 256-color and true color support
@@ -62,49 +69,116 @@
 ## Installation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jsas4coding/ops-config/main/install | bash
+curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/install | bash
 ```
 
 ### What Gets Installed
 
-| Component | Location | Description |
-|-----------|----------|-------------|
-| Neovim | `/opt/nvim` | Latest stable release |
-| Neovim Wrapper | `/var/scripts/neovim` | Python environment activation |
-| Python venv | `~/.config/opsconfig/lib/python` | pynvim and utilities |
-| Node.js | `~/.nvm` | NVM with Node v22 |
-| Fonts | `~/.local/share/fonts` | JetBrains Mono, Fira Code |
-| Bash configs | `~/.bashrc`, etc. | Via GNU Stow |
-| Neovim configs | `~/.config/nvim` | Via GNU Stow |
+| Component      | Location                         | Description                           |
+| -------------- | -------------------------------- | ------------------------------------- |
+| Neovim         | `/opt/nvim`                      | Latest stable release                 |
+| Neovim Wrapper | `/var/scripts/neovim`            | Python environment activation         |
+| Python venv    | `~/.config/opsconfig/lib/python` | pynvim and utilities                  |
+| Node.js        | `~/.local/share/fnm`             | fnm (Fast Node Manager) with Node v22 |
+| Fonts          | `~/.local/share/fonts`           | JetBrains Mono, Fira Code             |
+| Bash configs   | `~/.bashrc`, etc.                | Via GNU Stow                          |
+| Neovim configs | `~/.config/nvim`                 | Via GNU Stow                          |
 
 ### Installation Options
 
 ```bash
-# Standard installation
-curl -fsSL https://raw.githubusercontent.com/jsas4coding/ops-config/main/install | bash
+# Standard installation (interactive wizard)
+curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/install | bash
 
 # Force Python environment rebuild
-curl -fsSL https://raw.githubusercontent.com/jsas4coding/ops-config/main/install | bash -s -- --force
+curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/install | bash -s -- --force
+
+# Skip configuration wizard (use existing config)
+curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/install | bash -s -- --no-wizard
 ```
+
+### Configuration File
+
+The installer creates a configuration at `~/.config/opsconfig/config`:
+
+| Setting              | Description                   | Default                      |
+| -------------------- | ----------------------------- | ---------------------------- |
+| `SERVER_NAME`        | Displayed in shell prompt     | hostname                     |
+| `PHP_VERSION`        | PHP CLI version               | (empty)                      |
+| `NODE_VERSION`       | Node.js version for fnm       | 22                           |
+| `INSTALL_FONTS`      | Install Nerd Fonts            | true                         |
+| `FONTS`              | Fonts to install              | JetBrainsMono FiraCode       |
+| `INSTALL_FZF`        | Install fzf fuzzy finder      | true                         |
+| `INSTALL_PYTHON_ENV` | Python environment for Neovim | true                         |
+| `PYTHON_PACKAGES`    | Python packages to install    | neovim pynvim black requests |
+
+### Migration from NVM to fnm
+
+If you're migrating from an existing NVM installation:
+
+```bash
+# Preview migration (dry run)
+~/.opsconfig/upgrade-node-manager --dry-run
+
+# Full migration
+~/.opsconfig/upgrade-node-manager
+
+# Keep NVM after migration
+~/.opsconfig/upgrade-node-manager --keep-nvm
+```
+
+The migration script:
+
+- Detects installed Node versions in NVM
+- Captures global npm packages
+- Installs fnm with same versions (major only: v22, v24)
+- Reinstalls global packages
+- Removes NVM on success
+
+### PHP Installation
+
+Install and configure PHP with FPM:
+
+```bash
+# Install PHP 8.4 with interactive wizard
+sudo ~/.opsconfig/install-php 8.4
+
+# Install with default settings
+sudo ~/.opsconfig/install-php 8.3 --no-wizard
+```
+
+The script installs:
+
+- **Extensions**: bcmath, curl, gd, imagick, imap, intl, mbstring, mysql, opcache, phpdbg, readline,
+  soap, sqlite3, tidy, xml, xsl, yaml, zip
+- **Configuration**: `/etc/php/{version}/cli/conf.d/99-opsconfig.ini`
+- **FPM Pool**: `/etc/php/{version}/fpm/pool.d/{user}.conf`
 
 ---
 
 ## System Requirements
 
 ### Minimum Requirements
+
 - **OS**: Ubuntu 20.04+, Debian 11+, Fedora 36+, Alpine 3.16+
 - **RAM**: 512MB (1GB recommended)
 - **Disk**: 500MB free space
 - **Terminal**: Any terminal with UTF-8 support
 
 ### Recommended
+
 - **Terminal**: WezTerm, Gnome Terminal, or any OSC52-compatible terminal
 - **TMUX**: 3.2+ for full clipboard passthrough support
 - **Font**: Any monospace font (NerdFonts optional)
 
 ### Dependencies (Auto-Installed)
+
 ```
-git curl jq stow ripgrep perl ruby-full build-essential clang python3-venv
+# Core development tools
+git curl wget jq stow ripgrep perl ruby-full build-essential clang python3-venv
+
+# Server utilities
+htop ncdu tree tmux fd-find unzip
 ```
 
 ---
@@ -151,81 +225,87 @@ opsconfig/
 
 ### Neovim Plugins
 
-| Plugin | Purpose | Loading |
-|--------|---------|---------|
-| **lazy.nvim** | Plugin manager | Always |
-| **catppuccin** | Frappe color scheme | Priority |
-| **blink.cmp** | Fast completion (0.5-4ms) | Insert mode |
-| **fzf-lua** | Fuzzy finder | On command |
-| **nvim-lspconfig** | LSP client | On attach |
-| **mason.nvim** | LSP/formatter installer | Lazy |
-| **nvim-treesitter** | Syntax highlighting | BufRead |
-| **nvim-tree** | File explorer | On command |
-| **lualine** | Statusline | Always |
-| **which-key** | Keybinding help | VeryLazy |
-| **conform.nvim** | Code formatting | On format |
-| **auto-save** | Automatic saving | Insert/TextChanged |
-| **nvim-osc52** | SSH clipboard | Always |
-| **noice.nvim** | UI improvements | VeryLazy |
-| **alpha** | Dashboard | VimEnter |
-| **fidget** | LSP progress | LSP attach |
+| Plugin              | Purpose                   | Loading            |
+| ------------------- | ------------------------- | ------------------ |
+| **lazy.nvim**       | Plugin manager            | Always             |
+| **catppuccin**      | Frappe color scheme       | Priority           |
+| **blink.cmp**       | Fast completion (0.5-4ms) | Insert mode        |
+| **fzf-lua**         | Fuzzy finder              | On command         |
+| **nvim-lspconfig**  | LSP client                | On attach          |
+| **mason.nvim**      | LSP/formatter installer   | Lazy               |
+| **nvim-treesitter** | Syntax highlighting       | BufRead            |
+| **nvim-tree**       | File explorer             | On command         |
+| **lualine**         | Statusline                | Always             |
+| **which-key**       | Keybinding help           | VeryLazy           |
+| **conform.nvim**    | Code formatting           | On format          |
+| **auto-save**       | Automatic saving          | Insert/TextChanged |
+| **nvim-osc52**      | SSH clipboard             | Always             |
+| **noice.nvim**      | UI improvements           | VeryLazy           |
+| **alpha**           | Dashboard                 | VimEnter           |
+| **fidget**          | LSP progress              | LSP attach         |
 
 ### Neovim Keybindings
 
 Leader key: `<Space>`
 
 #### File Navigation
-| Key | Action |
-|-----|--------|
-| `<leader>ff` | Find files |
-| `<leader>fg` | Live grep |
+
+| Key          | Action       |
+| ------------ | ------------ |
+| `<leader>ff` | Find files   |
+| `<leader>fg` | Live grep    |
 | `<leader>fb` | Find buffers |
 | `<leader>fr` | Recent files |
-| `<leader>fh` | Help tags |
-| `<leader>fc` | Commands |
-| `<leader>fk` | Keymaps |
+| `<leader>fh` | Help tags    |
+| `<leader>fc` | Commands     |
+| `<leader>fk` | Keymaps      |
 
 #### Buffer Management
-| Key | Action |
-|-----|--------|
-| `<Tab>` | Next buffer |
-| `<S-Tab>` | Previous buffer |
-| `<leader>bd` | Delete buffer |
+
+| Key          | Action                   |
+| ------------ | ------------------------ |
+| `<Tab>`      | Next buffer              |
+| `<S-Tab>`    | Previous buffer          |
+| `<leader>bd` | Delete buffer            |
 | `<leader>bo` | Close all except current |
 
 #### LSP
-| Key | Action |
-|-----|--------|
-| `gd` | Go to definition |
-| `gr` | Find references |
-| `gI` | Go to implementation |
-| `<leader>lrn` | Rename symbol |
-| `<leader>lca` | Code action |
-| `<leader>cf` | Format code |
+
+| Key           | Action               |
+| ------------- | -------------------- |
+| `gd`          | Go to definition     |
+| `gr`          | Find references      |
+| `gI`          | Go to implementation |
+| `<leader>lrn` | Rename symbol        |
+| `<leader>lca` | Code action          |
+| `<leader>cf`  | Format code          |
 
 #### File Explorer
-| Key | Action |
-|-----|--------|
-| `<leader>ee` | Toggle explorer |
-| `<leader>er` | Refresh explorer |
+
+| Key          | Action            |
+| ------------ | ----------------- |
+| `<leader>ee` | Toggle explorer   |
+| `<leader>er` | Refresh explorer  |
 | `<leader>ec` | Collapse explorer |
 
 #### Clipboard
-| Key | Action |
-|-----|--------|
-| `<leader>yp` | Copy full path |
-| `<leader>yn` | Copy filename |
+
+| Key          | Action             |
+| ------------ | ------------------ |
+| `<leader>yp` | Copy full path     |
+| `<leader>yn` | Copy filename      |
 | `<leader>yr` | Copy relative path |
-| `<leader>yl` | Copy path:line |
+| `<leader>yl` | Copy path:line     |
 
 #### Windows & Tabs
-| Key | Action |
-|-----|--------|
-| `<leader>wv` | Split vertical |
+
+| Key          | Action           |
+| ------------ | ---------------- |
+| `<leader>wv` | Split vertical   |
 | `<leader>wh` | Split horizontal |
-| `<leader>wx` | Close split |
-| `<leader>to` | New tab |
-| `<leader>tx` | Close tab |
+| `<leader>wx` | Close split      |
+| `<leader>to` | New tab          |
+| `<leader>tx` | Close tab        |
 
 ### Color Scheme
 
@@ -243,21 +323,23 @@ Colors are optimized for remote server terminals without NerdFont dependencies.
 
 ### Bash Aliases
 
-| Alias | Command | Description |
-|-------|---------|-------------|
-| `c` | `clear` | Clear screen |
-| `q`, `e`, `quit` | `exit` | Exit shell |
-| `v`, `vi`, `vim` | Neovim wrapper | Edit with Neovim |
-| `..`, `...`, `....` | `cd ..`, etc. | Quick navigation |
-| `l`, `ls`, `ll` | Enhanced ls | Sorted, colored listing |
-| `u` | `update_system` | Full system update |
-| `clip`, `copy` | `remote-copy` | Copy to clipboard |
-| `reload` | `source ~/.bashrc` | Reload configuration |
+| Alias               | Command            | Description             |
+| ------------------- | ------------------ | ----------------------- |
+| `c`                 | `clear`            | Clear screen            |
+| `q`, `e`, `quit`    | `exit`             | Exit shell              |
+| `v`, `vi`, `vim`    | Neovim wrapper     | Edit with Neovim        |
+| `..`, `...`, `....` | `cd ..`, etc.      | Quick navigation        |
+| `l`, `ls`, `ll`     | Enhanced ls        | Sorted, colored listing |
+| `u`                 | `update_system`    | Full system update      |
+| `clip`, `copy`      | `remote-copy`      | Copy to clipboard       |
+| `reload`            | `source ~/.bashrc` | Reload configuration    |
 
 ### Bash Functions
 
 #### `update_system` / `u`
+
 Comprehensive system update:
+
 1. Runs `before_install` hook (if exists)
 2. Updates OpsConfig from GitHub
 3. Updates system packages (apt/dnf/yum/apk)
@@ -266,7 +348,9 @@ Comprehensive system update:
 6. Reloads bash configuration
 
 #### `remote-copy`
+
 SSH-aware clipboard function:
+
 - **SSH sessions**: Uses OSC52 escape sequence
 - **Local (Wayland)**: Uses wl-copy
 - **Local (X11)**: Uses xclip or xsel
@@ -274,7 +358,9 @@ SSH-aware clipboard function:
 - **Fallback**: OSC52 for any terminal
 
 #### `detect_distro`
+
 Returns current Linux distribution:
+
 - ubuntu, debian, fedora, centos, rhel, rocky, almalinux, alpine, unknown
 
 ### Shell Options
@@ -298,20 +384,22 @@ shopt -s nocaseglob    # Case-insensitive globbing
 ## TMUX Configuration
 
 ### Prefix Key
+
 `Ctrl-Space` (not default `Ctrl-b`)
 
 ### Key Bindings
 
-| Key | Action |
-|-----|--------|
-| `prefix + \|` | Vertical split |
-| `prefix + -` | Horizontal split |
-| `prefix + h/j/k/l` | Navigate panes |
-| `prefix + Enter` | Enter copy mode |
-| `v` (copy mode) | Begin selection |
-| `y` (copy mode) | Copy selection |
+| Key                | Action           |
+| ------------------ | ---------------- |
+| `prefix + \|`      | Vertical split   |
+| `prefix + -`       | Horizontal split |
+| `prefix + h/j/k/l` | Navigate panes   |
+| `prefix + Enter`   | Enter copy mode  |
+| `v` (copy mode)    | Begin selection  |
+| `y` (copy mode)    | Copy selection   |
 
 ### Features
+
 - **Vi Mode**: Vim-style copy mode navigation
 - **Mouse Support**: Click, scroll, resize
 - **True Color**: Full 256/true color support
@@ -332,6 +420,7 @@ OpsConfig provides seamless clipboard integration across environments:
 4. **Nested TMUX**: Proper escape sequence wrapping
 
 ### Supported Terminals
+
 - WezTerm (full OSC52 support)
 - Gnome Terminal (OSC52 support)
 - iTerm2 (OSC52 support)
@@ -339,6 +428,7 @@ OpsConfig provides seamless clipboard integration across environments:
 - kitty (OSC52 support)
 
 ### Usage
+
 ```bash
 # Copy text
 echo "text" | clip
@@ -356,7 +446,9 @@ cat file.txt | copy
 ### Best Practices
 
 #### Connection Multiplexing
+
 Add to `~/.ssh/config`:
+
 ```ssh
 Host *
     ControlMaster auto
@@ -367,15 +459,19 @@ Host *
 ```
 
 #### SSH Agent Auto-Start
+
 OpsConfig automatically starts ssh-agent if not running.
 
 #### Mosh Support
+
 For unstable connections, use Mosh:
+
 ```bash
 mosh user@server
 ```
 
 ### Clipboard Over SSH
+
 1. Ensure your local terminal supports OSC52
 2. Use TMUX on the remote server
 3. Copy operations will work transparently
@@ -385,18 +481,22 @@ mosh user@server
 ## Update System
 
 ### Single Command Update
+
 ```bash
 u  # or 'update_system'
 ```
 
 ### What Gets Updated
+
 1. **OpsConfig**: Latest from GitHub
 2. **System Packages**: Via apt/dnf/yum/apk
 3. **Composer**: PHP package manager (if available)
 4. **PHP Version**: Default CLI version (if configured)
 
 ### Custom Hooks
+
 Create scripts in `~/.config/opsconfig/`:
+
 - `before_install`: Runs before OpsConfig update
 - `after_install`: Runs after update completes
 
@@ -405,20 +505,25 @@ Create scripts in `~/.config/opsconfig/`:
 ## Customization
 
 ### Server Name
+
 Set during installation or edit:
+
 ```bash
 echo 'SERVER_NAME="my-server"' > ~/.config/opsconfig/.bash_env_local
 ```
 
 ### PHP Version
+
 ```bash
 echo '8.2' > ~/.config/opsconfig/.php
 ```
 
 ### Environment Variables
+
 Edit `~/.config/opsconfig/.bash_env_local` for server-specific overrides.
 
 ### Python Path
+
 ```bash
 export OPSCONFIG_PYTHON_LIB_PATH="/custom/path/python"
 ```
@@ -430,6 +535,7 @@ export OPSCONFIG_PYTHON_LIB_PATH="/custom/path/python"
 ### Common Issues
 
 #### Neovim: Plugin errors
+
 ```bash
 # Clear plugin cache
 rm -rf ~/.local/share/nvim
@@ -438,16 +544,20 @@ nvim  # Reinstalls plugins
 ```
 
 #### Clipboard not working over SSH
+
 1. Check terminal OSC52 support
 2. Verify TMUX has `set -g set-clipboard on`
 3. Ensure `set -g allow-passthrough on`
 
 #### Slow startup
+
 1. Check LSP server health: `:checkhealth`
 2. Review lazy-loaded plugins: `:Lazy profile`
 
 #### Font issues
+
 Icons display as boxes:
+
 - OpsConfig uses ASCII-compatible icons by default
 - NerdFonts are optional enhancements
 
@@ -456,6 +566,7 @@ Icons display as boxes:
 ## Security
 
 See [SECURITY.md](SECURITY.md) for:
+
 - Reporting vulnerabilities
 - Security considerations
 - What the install script modifies

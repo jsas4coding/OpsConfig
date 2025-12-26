@@ -122,15 +122,6 @@ local keymaps = function()
       opts = {},
       enabled = true,
     },
-    {
-      modes = 'n',
-      lhs = '<leader>rl',
-      rhs = ':source %<CR>',
-      desc = 'Reload Lua File',
-      opts = {},
-      enabled = true,
-    },
-
     -- SUBSECTION: Plugin Managers
     {
       modes = 'n',
@@ -455,24 +446,6 @@ local keymaps = function()
       lhs = '<leader>lp',
       rhs = ':lprev<CR>',
       desc = 'Previous item in location list',
-      opts = {},
-      enabled = true,
-    },
-
-    -- SUBSECTION: Lua Execution
-    {
-      modes = 'n',
-      lhs = '<leader>lx',
-      rhs = ':lua <C-r>=getline(\'.\')<CR><CR>',
-      desc = 'Execute current line as Lua',
-      opts = {},
-      enabled = true,
-    },
-    {
-      modes = 'v',
-      lhs = '<leader>lx',
-      rhs = ':<C-u>lua loadstring(table.concat(vim.fn.getline(\'.\', \'.\'), \'\\n\'))()<CR>',
-      desc = 'Execute selection as Lua',
       opts = {},
       enabled = true,
     },

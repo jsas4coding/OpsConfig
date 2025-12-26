@@ -8,13 +8,13 @@
     "email": "hi@jsas.dev"
   },
   "license": "MIT",
-  "homepage": "https://github.com/jsas4coding/ops-config#readme",
+  "homepage": "https://github.com/jsas4coding/OpsConfig#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jsas4coding/ops-config.git"
+    "url": "git+https://github.com/jsas4coding/OpsConfig.git"
   },
   "bugs": {
-    "url": "https://github.com/jsas4coding/ops-config/issues"
+    "url": "https://github.com/jsas4coding/OpsConfig/issues"
   },
   "keywords": [
     "dotfiles",

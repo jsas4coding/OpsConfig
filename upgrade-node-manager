@@ -1,0 +1,462 @@
+#!/usr/bin/env bash
+# =============================================================================
+# OpsConfig: NVM to fnm Migration Script
+# =============================================================================
+# Migrates from NVM (Node Version Manager) to fnm (Fast Node Manager).
+# - Detects installed Node versions in nvm
+# - Captures global packages
+# - Installs fnm with same versions (major only: v22, v24, etc.)
+# - Reinstalls global packages
+# - Removes nvm completely on success
+# =============================================================================
+
+set -euo pipefail
+IFS=$'\n\t'
+
+# =============================================================================
+# COLORS AND ICONS
+# =============================================================================
+
+readonly RED="\e[31m"
+readonly GREEN="\e[32m"
+readonly YELLOW="\e[33m"
+readonly CYAN="\e[36m"
+readonly WHITE="\e[97m"
+readonly MAGENTA="\e[35m"
+readonly RESET="\e[0m"
+
+readonly SUCCESS_ICON="[OK] "
+readonly ERROR_ICON="[ERR] "
+readonly WARNING_ICON="[WARN] "
+readonly INFO_ICON="[INFO] "
+readonly MIGRATE_ICON="[MIG] "
+
+# =============================================================================
+# GLOBALS
+# =============================================================================
+
+NVM_DIR="${NVM_DIR:-${HOME}/.nvm}"
+FNM_DIR="${HOME}/.local/share/fnm"
+BACKUP_DIR="${HOME}/.config/opsconfig/nvm-backup"
+GLOBAL_PACKAGES_FILE="${BACKUP_DIR}/global-packages.txt"
+INSTALLED_VERSIONS_FILE="${BACKUP_DIR}/installed-versions.txt"
+DEFAULT_VERSION_FILE="${BACKUP_DIR}/default-version.txt"
+
+declare -a INSTALLED_VERSIONS=()
+declare -a MAJOR_VERSIONS=()
+declare -a GLOBAL_PACKAGES=()
+DEFAULT_NODE_VERSION=""
+
+# =============================================================================
+# LOGGING FUNCTIONS
+# =============================================================================
+
+msg() {
+  local type="$1"
+  local text="$2"
+  local icon=""
+  local color=""
+
+  case "$type" in
+    success) icon="$SUCCESS_ICON"; color="$GREEN" ;;
+    error) icon="$ERROR_ICON"; color="$RED" ;;
+    warning) icon="$WARNING_ICON"; color="$YELLOW" ;;
+    info) icon="$INFO_ICON"; color="$CYAN" ;;
+    migrate) icon="$MIGRATE_ICON"; color="$MAGENTA" ;;
+    *) icon=" "; color="$WHITE" ;;
+  esac
+
+  echo -e "${color}${icon}${text}${RESET}"
+}
+
+# =============================================================================
+# UTILITY FUNCTIONS
+# =============================================================================
+
+check_nvm_installed() {
+  if [[ ! -d "${NVM_DIR}" ]] || [[ ! -s "${NVM_DIR}/nvm.sh" ]]; then
+    msg error "NVM is not installed at ${NVM_DIR}"
+    msg info "Nothing to migrate. You can install fnm directly with:"
+    msg info "  curl -fsSL https://fnm.vercel.app/install | bash"
+    exit 1
+  fi
+}
+
+check_fnm_not_installed() {
+  if command -v fnm &>/dev/null; then
+    msg warning "fnm is already installed."
+    msg info "If you want to complete the migration, remove nvm manually:"
+    msg info "  rm -rf ${NVM_DIR}"
+    msg info "  # Remove nvm lines from ~/.bashrc"
+    exit 0
+  fi
+}
+
+load_nvm() {
+  msg info "Loading NVM..."
+
+  # shellcheck disable=SC1091
+  source "${NVM_DIR}/nvm.sh"
+
+  if ! command -v nvm &>/dev/null; then
+    msg error "Failed to load NVM."
+    exit 1
+  fi
+
+  msg success "NVM loaded successfully."
+}
+
+extract_major_version() {
+  local version="$1"
+  # Extract major version: v22.1.0 -> 22, v20.10.0 -> 20
+  echo "${version}" | sed -E 's/^v?([0-9]+).*/\1/'
+}
+
+get_installed_versions() {
+  msg info "Detecting installed Node versions..."
+
+  # Get all installed versions
+  local versions
+  versions=$(nvm ls --no-colors 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sort -V | uniq)
+
+  if [[ -z "${versions}" ]]; then
+    msg warning "No Node versions found in NVM."
+    return 0
+  fi
+
+  # Store full versions
+  while IFS= read -r version; do
+    INSTALLED_VERSIONS+=("${version}")
+  done <<< "${versions}"
+
+  # Extract unique major versions
+  local majors=()
+  for version in "${INSTALLED_VERSIONS[@]}"; do
+    local major
+    major=$(extract_major_version "${version}")
+    if [[ ! " ${majors[*]} " =~ \ ${major}\  ]]; then
+      majors+=("${major}")
+    fi
+  done
+
+  MAJOR_VERSIONS=("${majors[@]}")
+
+  msg success "Found ${#INSTALLED_VERSIONS[@]} version(s): ${INSTALLED_VERSIONS[*]}"
+  msg info "Major versions to install: ${MAJOR_VERSIONS[*]}"
+}
+
+get_default_version() {
+  msg info "Detecting default Node version..."
+
+  local default_alias
+  default_alias=$(nvm alias default 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "")
+
+  if [[ -n "${default_alias}" ]]; then
+    DEFAULT_NODE_VERSION=$(extract_major_version "${default_alias}")
+    msg success "Default version: v${DEFAULT_NODE_VERSION}"
+  else
+    # Use the highest major version as default
+    if [[ ${#MAJOR_VERSIONS[@]} -gt 0 ]]; then
+      DEFAULT_NODE_VERSION="${MAJOR_VERSIONS[-1]}"
+      msg info "No default set, using highest: v${DEFAULT_NODE_VERSION}"
+    fi
+  fi
+}
+
+get_global_packages() {
+  msg info "Detecting global packages..."
+
+  # Get global packages (excluding npm itself)
+  local packages
+  packages=$(npm list -g --depth=0 --json 2>/dev/null | jq -r '.dependencies | keys[]' 2>/dev/null | grep -v '^npm$' || echo "")
+
+  if [[ -z "${packages}" ]]; then
+    msg info "No global packages found."
+    return 0
+  fi
+
+  while IFS= read -r pkg; do
+    [[ -n "${pkg}" ]] && GLOBAL_PACKAGES+=("${pkg}")
+  done <<< "${packages}"
+
+  msg success "Found ${#GLOBAL_PACKAGES[@]} global package(s): ${GLOBAL_PACKAGES[*]}"
+}
+
+create_backup() {
+  msg info "Creating backup..."
+
+  mkdir -p "${BACKUP_DIR}"
+
+  # Save versions
+  printf '%s\n' "${INSTALLED_VERSIONS[@]}" > "${INSTALLED_VERSIONS_FILE}"
+
+  # Save major versions
+  printf '%s\n' "${MAJOR_VERSIONS[@]}" > "${BACKUP_DIR}/major-versions.txt"
+
+  # Save global packages
+  if [[ ${#GLOBAL_PACKAGES[@]} -gt 0 ]]; then
+    printf '%s\n' "${GLOBAL_PACKAGES[@]}" > "${GLOBAL_PACKAGES_FILE}"
+  fi
+
+  # Save default version
+  echo "${DEFAULT_NODE_VERSION}" > "${DEFAULT_VERSION_FILE}"
+
+  msg success "Backup created at ${BACKUP_DIR}"
+}
+
+install_fnm() {
+  msg migrate "Installing fnm (Fast Node Manager)..."
+
+  if [[ -d "${FNM_DIR}" ]]; then
+    msg warning "fnm directory exists, removing..."
+    rm -rf "${FNM_DIR}"
+  fi
+
+  mkdir -p "${FNM_DIR}"
+  local fnm_archive="fnm-linux.zip"
+  curl -fsSL "https://github.com/Schniz/fnm/releases/latest/download/${fnm_archive}" -o "/tmp/${fnm_archive}"
+  unzip -o "/tmp/${fnm_archive}" -d "${FNM_DIR}"
+  chmod +x "${FNM_DIR}/fnm"
+  rm -f "/tmp/${fnm_archive}"
+
+  # Add to PATH for this session
+  export PATH="${FNM_DIR}:${PATH}"
+
+  if ! command -v fnm &>/dev/null; then
+    msg error "fnm installation failed."
+    exit 1
+  fi
+
+  # Initialize fnm
+  eval "$(fnm env)"
+
+  msg success "fnm installed successfully."
+}
+
+install_node_versions() {
+  msg migrate "Installing Node versions via fnm..."
+
+  if [[ ${#MAJOR_VERSIONS[@]} -eq 0 ]]; then
+    msg warning "No versions to install."
+    return 0
+  fi
+
+  for major in "${MAJOR_VERSIONS[@]}"; do
+    msg info "Installing Node v${major}..."
+
+    if fnm install "${major}"; then
+      msg success "Node v${major} installed."
+    else
+      msg error "Failed to install Node v${major}."
+      return 1
+    fi
+  done
+
+  # Set default version
+  if [[ -n "${DEFAULT_NODE_VERSION}" ]]; then
+    msg info "Setting default version to v${DEFAULT_NODE_VERSION}..."
+    fnm default "${DEFAULT_NODE_VERSION}"
+    fnm use "${DEFAULT_NODE_VERSION}"
+    msg success "Default set to v${DEFAULT_NODE_VERSION}"
+  fi
+}
+
+install_global_packages() {
+  if [[ ${#GLOBAL_PACKAGES[@]} -eq 0 ]]; then
+    msg info "No global packages to install."
+    return 0
+  fi
+
+  msg migrate "Installing global packages..."
+
+  for pkg in "${GLOBAL_PACKAGES[@]}"; do
+    msg info "Installing ${pkg}..."
+
+    if npm install -g "${pkg}" 2>/dev/null; then
+      msg success "${pkg} installed."
+    else
+      msg warning "Failed to install ${pkg}, continuing..."
+    fi
+  done
+}
+
+verify_installation() {
+  msg info "Verifying installation..."
+
+  local errors=0
+
+  # Check fnm
+  if ! command -v fnm &>/dev/null; then
+    msg error "fnm not found in PATH."
+    ((errors++))
+  fi
+
+  # Check node
+  if ! command -v node &>/dev/null; then
+    msg error "node not found."
+    ((errors++))
+  else
+    msg success "node $(node --version) is working."
+  fi
+
+  # Check npm
+  if ! command -v npm &>/dev/null; then
+    msg error "npm not found."
+    ((errors++))
+  else
+    msg success "npm $(npm --version) is working."
+  fi
+
+  # Check installed versions
+  for major in "${MAJOR_VERSIONS[@]}"; do
+    if fnm list | grep -q "v${major}"; then
+      msg success "Node v${major} is available."
+    else
+      msg error "Node v${major} not found in fnm."
+      ((errors++))
+    fi
+  done
+
+  return "${errors}"
+}
+
+remove_nvm() {
+  msg migrate "Removing NVM..."
+
+  # Remove nvm directory
+  if [[ -d "${NVM_DIR}" ]]; then
+    rm -rf "${NVM_DIR}"
+    msg success "Removed ${NVM_DIR}"
+  fi
+
+  # Note: We don't modify .bashrc because OpsConfig manages it
+  # The fnm/nvm auto-detection in .bash_custom will handle this
+
+  msg success "NVM removed successfully."
+}
+
+show_summary() {
+  echo ""
+  msg success "=== Migration Complete ==="
+  echo ""
+  msg info "fnm location: ${FNM_DIR}"
+  msg info "Node versions: ${MAJOR_VERSIONS[*]}"
+  msg info "Default version: v${DEFAULT_NODE_VERSION}"
+
+  if [[ ${#GLOBAL_PACKAGES[@]} -gt 0 ]]; then
+    msg info "Global packages: ${GLOBAL_PACKAGES[*]}"
+  fi
+
+  echo ""
+  msg info "Backup saved at: ${BACKUP_DIR}"
+  msg info "Reload your shell: source ~/.bashrc"
+  echo ""
+}
+
+show_help() {
+  cat << EOF
+OpsConfig: NVM to fnm Migration Script
+
+Usage: $(basename "$0") [OPTIONS]
+
+Options:
+  --dry-run     Show what would be done without making changes
+  --keep-nvm    Don't remove NVM after migration
+  --help        Show this help message
+
+Description:
+  This script migrates from NVM to fnm (Fast Node Manager):
+  1. Detects installed Node versions in NVM
+  2. Captures global npm packages
+  3. Installs fnm
+  4. Installs same Node versions (major versions only: v22, v24)
+  5. Reinstalls global packages
+  6. Removes NVM (unless --keep-nvm is specified)
+
+Examples:
+  $(basename "$0")           # Full migration
+  $(basename "$0") --dry-run # Preview migration
+  $(basename "$0") --keep-nvm # Migrate but keep NVM
+
+EOF
+}
+
+# =============================================================================
+# MAIN
+# =============================================================================
+
+main() {
+  local dry_run=false
+  local keep_nvm=false
+
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dry-run) dry_run=true ;;
+      --keep-nvm) keep_nvm=true ;;
+      --help|-h) show_help; exit 0 ;;
+      *) msg error "Unknown option: $1"; show_help; exit 1 ;;
+    esac
+    shift
+  done
+
+  echo ""
+  msg info "=== OpsConfig: NVM to fnm Migration ==="
+  echo ""
+
+  # Pre-flight checks
+  check_nvm_installed
+  check_fnm_not_installed
+
+  # Load NVM and gather information
+  load_nvm
+  get_installed_versions
+  get_default_version
+  get_global_packages
+
+  # Dry run mode
+  if [[ "${dry_run}" == true ]]; then
+    echo ""
+    msg info "=== DRY RUN - No changes will be made ==="
+    echo ""
+    msg info "Would install fnm at: ${FNM_DIR}"
+    msg info "Would install Node versions: ${MAJOR_VERSIONS[*]}"
+    msg info "Would set default: v${DEFAULT_NODE_VERSION}"
+    msg info "Would install packages: ${GLOBAL_PACKAGES[*]}"
+
+    if [[ "${keep_nvm}" != true ]]; then
+      msg info "Would remove NVM at: ${NVM_DIR}"
+    fi
+
+    echo ""
+    msg info "Run without --dry-run to perform migration."
+    exit 0
+  fi
+
+  # Create backup before changes
+  create_backup
+
+  # Install fnm and migrate
+  install_fnm
+  install_node_versions
+  install_global_packages
+
+  # Verify everything works
+  if ! verify_installation; then
+    msg error "Verification failed. NVM will not be removed."
+    msg info "Check the errors above and try again."
+    msg info "Backup available at: ${BACKUP_DIR}"
+    exit 1
+  fi
+
+  # Remove NVM if requested
+  if [[ "${keep_nvm}" != true ]]; then
+    remove_nvm
+  else
+    msg info "Keeping NVM as requested (--keep-nvm)"
+  fi
+
+  show_summary
+}
+
+main "$@"
