@@ -18,27 +18,10 @@ export GIT_EDITOR='nvim'
 export OPSCONFIG_TYPE="${OPSCONFIG_TYPE:-servers}"
 
 # =============================================================================
-# DISTRIBUTION DETECTION
+# DISTRIBUTION (Ubuntu only)
 # =============================================================================
 
-detect_distro() {
-  if [[ -f /etc/os-release ]]; then
-    # shellcheck disable=SC1091
-    source /etc/os-release
-    echo "${ID:-unknown}"
-  elif [[ -f /etc/debian_version ]]; then
-    echo "debian"
-  elif [[ -f /etc/redhat-release ]]; then
-    echo "rhel"
-  elif [[ -f /etc/alpine-release ]]; then
-    echo "alpine"
-  else
-    echo "unknown"
-  fi
-}
-
-OPSCONFIG_DISTRO="$(detect_distro)"
-export OPSCONFIG_DISTRO
+export OPSCONFIG_DISTRO="ubuntu"
 
 # =============================================================================
 # LOGGING FUNCTIONS (ASCII-compatible, no Nerd Fonts required)
@@ -77,117 +60,25 @@ alias q='exit'
 # =============================================================================
 # SYSTEM UPDATE FUNCTION
 # =============================================================================
-# Supports: Debian/Ubuntu, RHEL/CentOS/Fedora, Alpine
-# Keeps Composer updated for PHP servers
+# Wrapper for the standalone update script.
+# Run 'update --help' for all options including server cleanup.
 # =============================================================================
 
 update_system() {
-  log_info "Starting system update..."
+  local update_script="${HOME}/.opsconfig/update"
 
-  # Run before_install hook if exists
-  if [[ -f "${HOME}/.config/opsconfig/before_install" ]]; then
-    log_info "Running before_install hook..."
-    # shellcheck disable=SC1091
-    source "${HOME}/.config/opsconfig/before_install"
-  fi
-
-  # Update OpsConfig
-  log_info "Updating OpsConfig..."
-  curl -fsSL https://raw.githubusercontent.com/jsas4coding/ops-config/main/install | bash
-
-  # System package updates (requires root)
-  if [[ $EUID -ne 0 ]]; then
-    log_warning "Non-root user. Skipping system package updates."
+  if [[ -x "${update_script}" ]]; then
+    "${update_script}" "$@"
   else
-    case "${OPSCONFIG_DISTRO}" in
-      ubuntu|debian)
-        log_info "Updating Debian/Ubuntu packages..."
-        sudo apt-get update -y
-        sudo apt-get upgrade -y
-        sudo apt-get dist-upgrade -y
-        sudo apt-get autoremove -y
-        ;;
-      fedora)
-        log_info "Updating Fedora packages..."
-        sudo dnf upgrade -y
-        sudo dnf autoremove -y
-        ;;
-      centos|rhel|rocky|almalinux)
-        log_info "Updating RHEL-based packages..."
-        sudo yum update -y
-        ;;
-      alpine)
-        log_info "Updating Alpine packages..."
-        sudo apk update
-        sudo apk upgrade
-        ;;
-      *)
-        log_warning "Unknown distribution: ${OPSCONFIG_DISTRO}. Skipping package updates."
-        ;;
-    esac
-
-    # Update Composer (if PHP is available)
-    if command -v php &>/dev/null; then
-      log_info "Updating Composer..."
-      if command -v composer &>/dev/null; then
-        sudo composer self-update 2>/dev/null || composer self-update
-      else
-        log_info "Installing Composer..."
-        local expected_checksum actual_checksum
-        expected_checksum="$(curl -sS https://composer.github.io/installer.sig)"
-        php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
-        actual_checksum="$(php -r "echo hash_file('sha384', 'composer-setup.php');")"
-
-        if [[ "${expected_checksum}" != "${actual_checksum}" ]]; then
-          log_error "Composer installer checksum verification failed!"
-          rm -f composer-setup.php
-          return 1
-        fi
-
-        sudo php composer-setup.php --install-dir=/usr/local/bin --filename=composer
-        rm -f composer-setup.php
-        log_success "Composer installed successfully."
-      fi
-
-      # Update PHP symlink if configured
-      local php_config="${HOME}/.config/opsconfig/.php"
-      if [[ -f "${php_config}" ]]; then
-        local php_version php_bin
-        php_version="$(tr -d ' \n' < "${php_config}")"
-
-        if [[ -n "${php_version}" ]]; then
-          php_bin="/usr/bin/php${php_version}"
-
-          if [[ -x "${php_bin}" ]]; then
-            log_info "Setting PHP ${php_version} as default..."
-            sudo ln -sfn "${php_bin}" /etc/alternatives/php
-            php -v
-          else
-            log_warning "PHP binary ${php_bin} not found or not executable."
-          fi
-        fi
-      fi
-    fi
+    log_error "Update script not found at ${update_script}"
+    log_info "Run the OpsConfig installer to fix this."
+    return 1
   fi
-
-  # Run after_install hook if exists
-  if [[ -f "${HOME}/.config/opsconfig/after_install" ]]; then
-    log_info "Running after_install hook..."
-    # shellcheck disable=SC1091
-    source "${HOME}/.config/opsconfig/after_install"
-  fi
-
-  # Reload bash configuration
-  if [[ -f "${HOME}/.bashrc" ]]; then
-    # shellcheck disable=SC1091
-    source "${HOME}/.bashrc"
-  fi
-
-  log_success "System update completed!"
 }
 
-alias updagrade="update_system"
+alias upgrade="update_system"
 alias u="update_system"
+alias uc="update_system --cleanup-only"
 
 #######################################################################################################################
 ## FileSystem
@@ -207,19 +98,19 @@ alias lt='ls --human-readable --size -1 -S --classify'
 # =============================================================================
 # Use wrapper script that activates Python environment for pynvim support
 NEOVIM_WRAPPER="/var/scripts/neovim"
-if [[ -x "${NEOVIM_WRAPPER}" ]]; then
-    alias v="${NEOVIM_WRAPPER}"
-    alias vi="${NEOVIM_WRAPPER}"
-    alias vim="${NEOVIM_WRAPPER}"
-    alias neovim="${NEOVIM_WRAPPER}"
-    alias nano="${NEOVIM_WRAPPER}"
+if [[ -x ${NEOVIM_WRAPPER} ]]; then
+  alias v="${NEOVIM_WRAPPER}"
+  alias vi="${NEOVIM_WRAPPER}"
+  alias vim="${NEOVIM_WRAPPER}"
+  alias neovim="${NEOVIM_WRAPPER}"
+  alias nano="${NEOVIM_WRAPPER}"
 else
-    # Fallback to direct nvim if wrapper not installed
-    alias v='nvim'
-    alias vi='nvim'
-    alias vim='nvim'
-    alias neovim='nvim'
-    alias nano='nvim'
+  # Fallback to direct nvim if wrapper not installed
+  alias v='nvim'
+  alias vi='nvim'
+  alias vim='nvim'
+  alias neovim='nvim'
+  alias nano='nvim'
 fi
 
 # =============================================================================
@@ -227,20 +118,26 @@ fi
 # =============================================================================
 
 # History settings
-HISTCONTROL=ignoreboth:erasedups  # Ignore duplicates and commands starting with space
-HISTSIZE=10000                     # Number of commands in memory
-HISTFILESIZE=20000                 # Number of commands in history file
-HISTTIMEFORMAT="%F %T "            # Add timestamps to history
+HISTCONTROL=ignoreboth:erasedups # Ignore duplicates and commands starting with space
+HISTSIZE=10000                   # Number of commands in memory
+HISTFILESIZE=20000               # Number of commands in history file
+HISTTIMEFORMAT="%F %T "          # Add timestamps to history
+
+# Security: filter sensitive commands from history
+HISTIGNORE='*password*:*passwd*:*secret*:*token*:*api_key*:*apikey*:*auth*:*credential*'
+HISTIGNORE+=':export *KEY*:export *SECRET*:export *TOKEN*:export *PASS*:export *AUTH*'
+HISTIGNORE+=':*mysql*-p*:*psql*-W*:*mongo*--password*:curl*-u *:wget*--password*'
+HISTIGNORE+=':*AWS_*=*:*GCP_*=*:*AZURE_*=*:ssh-add *:*id_rsa*:*id_ed25519*'
 
 # Shell options for better experience
-shopt -s histappend    # Append to history instead of overwriting
-shopt -s cdspell       # Auto-correct minor cd typos
-shopt -s dirspell      # Auto-correct directory spelling in completion
-shopt -s autocd        # Change to directory without typing cd
-shopt -s globstar      # Enable ** for recursive globbing
-shopt -s checkwinsize  # Update LINES and COLUMNS after each command
-shopt -s cmdhist       # Save multi-line commands as single history entry
-shopt -s nocaseglob    # Case-insensitive globbing
+shopt -s histappend   # Append to history instead of overwriting
+shopt -s cdspell      # Auto-correct minor cd typos
+shopt -s dirspell     # Auto-correct directory spelling in completion
+shopt -s autocd       # Change to directory without typing cd
+shopt -s globstar     # Enable ** for recursive globbing
+shopt -s checkwinsize # Update LINES and COLUMNS after each command
+shopt -s cmdhist      # Save multi-line commands as single history entry
+shopt -s nocaseglob   # Case-insensitive globbing
 
 # =============================================================================
 # PYTHON ENVIRONMENT (Disabled - use neovim wrapper instead)
@@ -261,37 +158,38 @@ alias sunlink-all='sudo find . -type l -exec unlink {} \;'
 alias reload='RELOAD=1 source ~/.bashrc'
 alias refresh-keys='sudo apt-key adv --refresh-keys --keyserver keyserver.ubuntu.com'
 
-#######################################################################################################################
-## PROJECT CONFIG FILE
-#######################################################################################################################
-#######################################################################################################################
-if [ -f .projectrc ]; then
-  source .projectrc
-fi
+# =============================================================================
+# NODE.JS VERSION MANAGER (fnm/nvm auto-detection)
+# =============================================================================
+# Supports both fnm (Fast Node Manager) and nvm with automatic detection.
+# fnm is preferred for better performance (Rust-based, faster shell startup).
 
-last_dir="${PWD}"
-
-function check_dir_change() {
-  if [[ ${PWD} != "${last_dir}" ]]; then
-    last_dir="${PWD}"
-
-    if [[ -f .projectrc ]]; then
-      source .projectrc
-    fi
+_load_node_manager() {
+  # Try fnm first (faster, Rust-based)
+  if command -v fnm &>/dev/null; then
+    eval "$(fnm env --use-on-cd)"
+    return 0
   fi
+
+  # Check fnm in common locations
+  if [[ -x "${HOME}/.local/share/fnm/fnm" ]]; then
+    export PATH="${HOME}/.local/share/fnm:${PATH}"
+    eval "$(fnm env --use-on-cd)"
+    return 0
+  fi
+
+  # Fallback to nvm if fnm not available
+  export NVM_DIR="${HOME}/.nvm"
+  if [[ -s "${NVM_DIR}/nvm.sh" ]]; then
+    \. "${NVM_DIR}/nvm.sh"
+    [[ -s "${NVM_DIR}/bash_completion" ]] && \. "${NVM_DIR}/bash_completion"
+    return 0
+  fi
+
+  return 1
 }
 
-#######################################################################################################################
-## SOFTWARE CONFIGURATIONS
-#######################################################################################################################
-#######################################################################################################################
-
-#######################################################################################################################
-## NVM
-#######################################################################################################################
-export NVM_DIR="${HOME}/.nvm"
-[ -s "${NVM_DIR}/nvm.sh" ] && \. "${NVM_DIR}/nvm.sh"                   # This loads nvm
-[ -s "${NVM_DIR}/bash_completion" ] && \. "${NVM_DIR}/bash_completion" # This loads nvm bash_completion
+_load_node_manager
 
 #######################################################################################################################
 ## FZF
@@ -308,73 +206,73 @@ export NVM_DIR="${HOME}/.nvm"
 # - WezTerm, Gnome Terminal, and other modern terminals
 
 function remote-copy() {
-    local content
+  local content
 
-    if [[ $# -eq 0 ]]; then
-        # Read from stdin
-        content=$(cat)
-    else
-        # Use arguments as content
-        content="$*"
-    fi
+  if [[ $# -eq 0 ]]; then
+    # Read from stdin
+    content=$(cat)
+  else
+    # Use arguments as content
+    content="$*"
+  fi
 
-    # Detect environment and use appropriate method
-    local is_ssh=false
-    local is_tmux=false
-    local is_wezterm=false
+  # Detect environment and use appropriate method
+  local is_ssh=false
+  local is_tmux=false
+  local is_wezterm=false
 
-    [[ -n "${SSH_CONNECTION:-}" ]] || [[ -n "${SSH_CLIENT:-}" ]] || [[ -n "${SSH_TTY:-}" ]] && is_ssh=true
-    [[ -n "${TMUX:-}" ]] && is_tmux=true
-    [[ -n "${WEZTERM_PANE:-}" ]] && is_wezterm=true
+  [[ -n ${SSH_CONNECTION:-} ]] || [[ -n ${SSH_CLIENT:-} ]] || [[ -n ${SSH_TTY:-} ]] && is_ssh=true
+  [[ -n ${TMUX:-} ]] && is_tmux=true
+  [[ -n ${WEZTERM_PANE:-} ]] && is_wezterm=true
 
-    # SSH sessions: Always use OSC52 (works with TMUX passthrough)
-    if [[ "${is_ssh}" == true ]]; then
-        _osc52_copy "$content"
-        return
-    fi
-
-    # Local session: Try system clipboard tools in order of preference
-    # Wayland
-    if command -v wl-copy &>/dev/null && [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
-        printf '%s' "$content" | wl-copy
-        return
-    fi
-
-    # X11
-    if command -v xclip &>/dev/null && [[ -n "${DISPLAY:-}" ]]; then
-        printf '%s' "$content" | xclip -in -selection clipboard
-        return
-    fi
-
-    if command -v xsel &>/dev/null && [[ -n "${DISPLAY:-}" ]]; then
-        printf '%s' "$content" | xsel --clipboard --input
-        return
-    fi
-
-    # macOS
-    if command -v pbcopy &>/dev/null; then
-        printf '%s' "$content" | pbcopy
-        return
-    fi
-
-    # Fallback to OSC52 for any terminal that supports it
+  # SSH sessions: Always use OSC52 (works with TMUX passthrough)
+  if [[ ${is_ssh} == true ]]; then
     _osc52_copy "$content"
+    return
+  fi
+
+  # Local session: Try system clipboard tools in order of preference
+  # Wayland
+  if command -v wl-copy &>/dev/null && [[ -n ${WAYLAND_DISPLAY:-} ]]; then
+    printf '%s' "$content" | wl-copy
+    return
+  fi
+
+  # X11
+  if command -v xclip &>/dev/null && [[ -n ${DISPLAY:-} ]]; then
+    printf '%s' "$content" | xclip -in -selection clipboard
+    return
+  fi
+
+  if command -v xsel &>/dev/null && [[ -n ${DISPLAY:-} ]]; then
+    printf '%s' "$content" | xsel --clipboard --input
+    return
+  fi
+
+  # macOS
+  if command -v pbcopy &>/dev/null; then
+    printf '%s' "$content" | pbcopy
+    return
+  fi
+
+  # Fallback to OSC52 for any terminal that supports it
+  _osc52_copy "$content"
 }
 
 # OSC52 escape sequence for clipboard (works in most modern terminals)
 function _osc52_copy() {
-    local content="$1"
-    local encoded
-    encoded=$(printf '%s' "$content" | base64 | tr -d '\r\n')
+  local content="$1"
+  local encoded
+  encoded=$(printf '%s' "$content" | base64 | tr -d '\r\n')
 
-    # Use appropriate escape sequence based on terminal
-    if [[ -n "${TMUX:-}" ]]; then
-        # TMUX requires passthrough escape
-        printf '\033Ptmux;\033\033]52;c;%s\a\033\\' "$encoded" >&2
-    else
-        # Standard OSC52
-        printf '\033]52;c;%s\a' "$encoded" >&2
-    fi
+  # Use appropriate escape sequence based on terminal
+  if [[ -n ${TMUX:-} ]]; then
+    # TMUX requires passthrough escape
+    printf '\033Ptmux;\033\033]52;c;%s\a\033\\' "$encoded" >&2
+  else
+    # Standard OSC52
+    printf '\033]52;c;%s\a' "$encoded" >&2
+  fi
 }
 
 # Aliases for easy clipboard operations
@@ -386,8 +284,8 @@ alias copy='remote-copy'
 # SSH AGENT (Auto-start for key management)
 # =============================================================================
 # Automatically start ssh-agent if not running
-if [[ -z "${SSH_AUTH_SOCK:-}" ]]; then
-    eval "$(ssh-agent -s)" &>/dev/null
+if [[ -z ${SSH_AUTH_SOCK:-} ]]; then
+  eval "$(ssh-agent -s)" &>/dev/null
 fi
 
 #######################################################################################################################

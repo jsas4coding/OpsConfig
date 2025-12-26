@@ -1,0 +1,379 @@
+#!/usr/bin/env bash
+# =============================================================================
+# OpsConfig Update Script
+# =============================================================================
+# Updates OpsConfig, system packages, and performs server cleanup.
+# Repository: https://github.com/jsas4coding/OpsConfig
+# =============================================================================
+
+set -euo pipefail
+
+# =============================================================================
+# COLORS AND ICONS
+# =============================================================================
+
+RED="\e[31m"
+GREEN="\e[32m"
+YELLOW="\e[33m"
+CYAN="\e[36m"
+WHITE="\e[97m"
+MAGENTA="\e[35m"
+RESET="\e[0m"
+
+SUCCESS_ICON="[OK] "
+ERROR_ICON="[ERR] "
+WARNING_ICON="[WARN] "
+INFO_ICON="[INFO] "
+CLEAN_ICON="[CLN] "
+
+msg() {
+  local type="$1"
+  local text="$2"
+  local icon=""
+  local color=""
+
+  case "$type" in
+    success) icon="$SUCCESS_ICON"; color="$GREEN" ;;
+    error) icon="$ERROR_ICON"; color="$RED" ;;
+    warning) icon="$WARNING_ICON"; color="$YELLOW" ;;
+    info) icon="$INFO_ICON"; color="$CYAN" ;;
+    clean) icon="$CLEAN_ICON"; color="$MAGENTA" ;;
+    *) icon=" "; color="$WHITE" ;;
+  esac
+
+  echo -e "${color}${icon}${text}${RESET}"
+}
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+CONFIG_DIR="${HOME}/.config/opsconfig"
+CONFIG_FILE="${CONFIG_DIR}/config"
+OPSCONFIG_REPO="https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/install"
+
+# =============================================================================
+# HOOK EXECUTION
+# =============================================================================
+
+HOOKS_AUTHORIZED=false
+
+_check_hooks_authorization() {
+  local before_hook="${CONFIG_DIR}/before_install"
+  local after_hook="${CONFIG_DIR}/after_install"
+  local hooks_found=()
+
+  [[ -f "${before_hook}" ]] && hooks_found+=("before_install")
+  [[ -f "${after_hook}" ]] && hooks_found+=("after_install")
+
+  if [[ ${#hooks_found[@]} -eq 0 ]]; then
+    return 0
+  fi
+
+  msg warning "Hooks found: ${hooks_found[*]}"
+  echo -en "${CYAN}Authorize hook execution? [y/N]: ${RESET}"
+  read -r answer
+
+  if [[ "${answer,,}" == "y" || "${answer,,}" == "yes" ]]; then
+    HOOKS_AUTHORIZED=true
+    msg success "Hooks authorized."
+  else
+    msg info "Hooks will be skipped."
+  fi
+}
+
+_source_hook() {
+  local hook_file="$1"
+  local hook_name="$2"
+
+  if [[ -f "${hook_file}" ]] && [[ "${HOOKS_AUTHORIZED}" == "true" ]]; then
+    msg info "Running ${hook_name} hook..."
+    # shellcheck disable=SC1090
+    source "${hook_file}"
+  fi
+}
+
+# =============================================================================
+# SAFE REMOTE SCRIPT EXECUTION
+# =============================================================================
+
+_execute_remote_script() {
+  local url="$1"
+  local description="$2"
+
+  msg info "Downloading ${description}..."
+
+  local install_script
+  install_script=$(mktemp)
+
+  # Download with timeout and error handling
+  if ! curl -fsSL --proto '=https' --tlsv1.2 --max-time 60 "${url}" -o "${install_script}"; then
+    msg error "Failed to download ${description}"
+    rm -f "${install_script}"
+    return 1
+  fi
+
+  # Verify it's a bash script (basic sanity check)
+  if ! head -1 "${install_script}" | grep -qE '^#!/usr/bin/env bash|^#!/bin/bash'; then
+    msg error "Downloaded file does not appear to be a valid bash script"
+    rm -f "${install_script}"
+    return 1
+  fi
+
+  # Execute
+  msg info "Executing ${description}..."
+  bash "${install_script}" --no-wizard
+  local exit_code=$?
+  rm -f "${install_script}"
+
+  if [[ ${exit_code} -ne 0 ]]; then
+    msg error "${description} failed"
+    return 1
+  fi
+
+  return 0
+}
+
+# =============================================================================
+# SYSTEM PACKAGE UPDATE (Ubuntu)
+# =============================================================================
+
+update_system_packages() {
+  if [[ $EUID -ne 0 ]]; then
+    msg warning "Non-root user. Skipping system package updates."
+    return 0
+  fi
+
+  msg info "Updating Ubuntu packages..."
+  apt-get update -y
+  apt-get upgrade -y
+  apt-get dist-upgrade -y
+  apt-get autoremove -y
+}
+
+# =============================================================================
+# COMPOSER UPDATE (PHP)
+# =============================================================================
+
+update_composer() {
+  if ! command -v php &>/dev/null; then
+    return 0
+  fi
+
+  msg info "Checking Composer..."
+
+  if command -v composer &>/dev/null; then
+    msg info "Updating Composer..."
+    composer self-update 2>/dev/null || true
+  else
+    msg info "Installing Composer..."
+    local expected_checksum actual_checksum
+    expected_checksum="$(curl -sS https://composer.github.io/installer.sig)"
+    php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+    actual_checksum="$(php -r "echo hash_file('sha384', 'composer-setup.php');")"
+
+    if [[ "${expected_checksum}" != "${actual_checksum}" ]]; then
+      msg error "Composer installer checksum verification failed!"
+      rm -f composer-setup.php
+      return 1
+    fi
+
+    if [[ $EUID -eq 0 ]]; then
+      php composer-setup.php --install-dir=/usr/local/bin --filename=composer
+    else
+      php composer-setup.php --install-dir="${HOME}/.local/bin" --filename=composer
+    fi
+    rm -f composer-setup.php
+    msg success "Composer installed successfully."
+  fi
+
+  # Update PHP symlink if configured
+  local php_config="${CONFIG_DIR}/.php"
+  if [[ -f "${php_config}" ]] && [[ $EUID -eq 0 ]]; then
+    local php_version php_bin
+    php_version="$(tr -d ' \n' < "${php_config}")"
+
+    # Validate PHP version format (e.g., 8.1, 8.2, 8.3)
+    if [[ "${php_version}" =~ ^[0-9]+\.[0-9]+$ ]]; then
+      php_bin="/usr/bin/php${php_version}"
+
+      if [[ -x "${php_bin}" ]]; then
+        msg info "Setting PHP ${php_version} as default..."
+        ln -sfn "${php_bin}" /etc/alternatives/php
+        php -v
+      else
+        msg warning "PHP binary ${php_bin} not found."
+      fi
+    fi
+  fi
+}
+
+# =============================================================================
+# SERVER CLEANUP
+# =============================================================================
+
+cleanup_server() {
+  msg clean "Starting server cleanup..."
+
+  # System logs (older than 7 days)
+  if [[ $EUID -eq 0 ]]; then
+    msg clean "Cleaning old system logs..."
+
+    # Journalctl vacuum (systemd)
+    if command -v journalctl &>/dev/null; then
+      journalctl --vacuum-time=7d 2>/dev/null || true
+    fi
+
+    # Old log files
+    if [[ -d /var/log ]]; then
+      find /var/log -type f -name "*.gz" -mtime +7 -delete 2>/dev/null || true
+      find /var/log -type f -name "*.old" -mtime +7 -delete 2>/dev/null || true
+      find /var/log -type f -name "*.[0-9]" -mtime +7 -delete 2>/dev/null || true
+      find /var/log -type f -name "*.[0-9].gz" -mtime +7 -delete 2>/dev/null || true
+    fi
+
+    # APT cache
+    msg clean "Cleaning APT cache..."
+    apt-get clean -y 2>/dev/null || true
+
+    # Old kernels
+    msg clean "Removing old kernels..."
+    apt-get autoremove --purge -y 2>/dev/null || true
+  fi
+
+  # Temporary files
+  msg clean "Cleaning temporary files..."
+  if [[ -d /tmp ]]; then
+    find /tmp -type f -atime +3 -delete 2>/dev/null || true
+    find /tmp -type d -empty -delete 2>/dev/null || true
+  fi
+
+  # User cache directories
+  msg clean "Cleaning user caches..."
+
+  # npm cache
+  if command -v npm &>/dev/null; then
+    npm cache clean --force 2>/dev/null || true
+  fi
+
+  # pip cache
+  if command -v pip3 &>/dev/null; then
+    pip3 cache purge 2>/dev/null || true
+  fi
+
+  # Composer cache
+  if command -v composer &>/dev/null; then
+    composer clear-cache 2>/dev/null || true
+  fi
+
+  # Go cache
+  if command -v go &>/dev/null; then
+    go clean -cache 2>/dev/null || true
+  fi
+
+  # Neovim caches
+  local nvim_cache="${HOME}/.cache/nvim"
+  if [[ -d "${nvim_cache}" ]]; then
+    find "${nvim_cache}" -name "*.log" -mtime +7 -delete 2>/dev/null || true
+    find "${nvim_cache}" -name "*.swp" -delete 2>/dev/null || true
+  fi
+
+  # Neovim undo files (older than 30 days)
+  local nvim_undo="${HOME}/.local/state/nvim/undo"
+  if [[ -d "${nvim_undo}" ]]; then
+    find "${nvim_undo}" -type f -mtime +30 -delete 2>/dev/null || true
+  fi
+
+  # Thumbnail cache
+  local thumb_cache="${HOME}/.cache/thumbnails"
+  if [[ -d "${thumb_cache}" ]]; then
+    rm -rf "${thumb_cache:?}"/* 2>/dev/null || true
+  fi
+
+  # Trash (older than 30 days)
+  local trash_dir="${HOME}/.local/share/Trash"
+  if [[ -d "${trash_dir}" ]]; then
+    find "${trash_dir}" -type f -mtime +30 -delete 2>/dev/null || true
+    find "${trash_dir}" -type d -empty -delete 2>/dev/null || true
+  fi
+
+  msg success "Server cleanup completed!"
+}
+
+# =============================================================================
+# RELOAD BASH CONFIGURATION
+# =============================================================================
+
+reload_bash() {
+  if [[ -f "${HOME}/.bashrc" ]]; then
+    msg info "Reloading bash configuration..."
+    # shellcheck disable=SC1091
+    source "${HOME}/.bashrc"
+  fi
+}
+
+# =============================================================================
+# MAIN
+# =============================================================================
+
+main() {
+  local skip_cleanup=false
+  local only_cleanup=false
+
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --no-cleanup) skip_cleanup=true ;;
+      --cleanup-only) only_cleanup=true ;;
+      -h|--help)
+        echo "Usage: update [OPTIONS]"
+        echo ""
+        echo "Options:"
+        echo "  --no-cleanup     Skip server cleanup"
+        echo "  --cleanup-only   Only run server cleanup"
+        echo "  -h, --help       Show this help"
+        exit 0
+        ;;
+      *) msg warning "Unknown option: $1" ;;
+    esac
+    shift
+  done
+
+  echo ""
+  msg info "=== OpsConfig Update ==="
+  echo ""
+
+  # Check for hooks and ask authorization
+  _check_hooks_authorization
+
+  # Run before_install hook
+  _source_hook "${CONFIG_DIR}/before_install" "before_install"
+
+  if [[ "${only_cleanup}" == "false" ]]; then
+    # Update OpsConfig
+    _execute_remote_script "${OPSCONFIG_REPO}" "OpsConfig installer"
+
+    # Update system packages
+    update_system_packages
+
+    # Update Composer
+    update_composer
+  fi
+
+  # Server cleanup
+  if [[ "${skip_cleanup}" == "false" ]]; then
+    cleanup_server
+  fi
+
+  # Run after_install hook
+  _source_hook "${CONFIG_DIR}/after_install" "after_install"
+
+  # Reload bash configuration
+  reload_bash
+
+  echo ""
+  msg success "=== OpsConfig Update Complete ==="
+  echo ""
+}
+
+main "$@"

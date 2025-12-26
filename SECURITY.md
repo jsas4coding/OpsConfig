@@ -15,41 +15,42 @@ If you discover a security vulnerability in OpsConfig, please report it privatel
 
 The `install` script performs the following privileged operations when run as root:
 
-| Operation | Purpose | Risk Level |
-|-----------|---------|------------|
-| `apt install` | Install system packages | Low |
-| Download Neovim | Install from GitHub releases | Low |
-| Modify `/etc/environment` | Add PATH entries | Medium |
-| Create `/var/scripts/` | Wrapper script location | Low |
-| Install fonts | User font directory | Low |
+| Operation                 | Purpose                      | Risk Level |
+| ------------------------- | ---------------------------- | ---------- |
+| `apt install`             | Install system packages      | Low        |
+| Download Neovim           | Install from GitHub releases | Low        |
+| Modify `/etc/environment` | Add PATH entries             | Medium     |
+| Create `/var/scripts/`    | Wrapper script location      | Low        |
+| Install fonts             | User font directory          | Low        |
 
 ### File Modifications
 
-| File/Directory | Operation | Notes |
-|----------------|-----------|-------|
-| `~/.bashrc` | Replaced | Via stow symlink |
-| `~/.bash_*` | Replaced | Via stow symlink |
-| `~/.config/nvim/` | Replaced | Via stow symlink |
-| `~/.tmux.conf` | Replaced | Via stow symlink |
-| `/opt/nvim/` | Created | Neovim installation |
-| `/var/scripts/neovim` | Created | Wrapper script |
-| `/etc/environment` | Modified | PATH additions |
+| File/Directory        | Operation | Notes               |
+| --------------------- | --------- | ------------------- |
+| `~/.bashrc`           | Replaced  | Via stow symlink    |
+| `~/.bash_*`           | Replaced  | Via stow symlink    |
+| `~/.config/nvim/`     | Replaced  | Via stow symlink    |
+| `~/.tmux.conf`        | Replaced  | Via stow symlink    |
+| `/opt/nvim/`          | Created   | Neovim installation |
+| `/var/scripts/neovim` | Created   | Wrapper script      |
+| `/etc/environment`    | Modified  | PATH additions      |
 
 ### Network Operations
 
 The install script downloads from:
 
-| Source | Purpose | Verification |
-|--------|---------|--------------|
-| `github.com/neovim` | Neovim binary | HTTPS |
-| `github.com/nerd-fonts` | Font files | SHA256 hash |
-| `github.com/nvm-sh` | Node Version Manager | HTTPS |
-| `getcomposer.org` | Composer installer | SHA384 checksum |
-| `raw.githubusercontent.com` | OpsConfig files | HTTPS |
+| Source                      | Purpose            | Verification    |
+| --------------------------- | ------------------ | --------------- |
+| `github.com/neovim`         | Neovim binary      | HTTPS           |
+| `github.com/nerd-fonts`     | Font files         | SHA256 hash     |
+| `fnm.vercel.app`            | Fast Node Manager  | HTTPS           |
+| `getcomposer.org`           | Composer installer | SHA384 checksum |
+| `raw.githubusercontent.com` | OpsConfig files    | HTTPS           |
 
 ### Credentials
 
 OpsConfig does **not**:
+
 - Store any passwords or secrets
 - Access external APIs with credentials
 - Modify SSH keys or configurations
@@ -59,24 +60,26 @@ OpsConfig does **not**:
 
 Configuration files stored in `~/.config/opsconfig/`:
 
-| File | Contents | Sensitivity |
-|------|----------|-------------|
-| `.bash_env_local` | Server name | Low |
-| `.php` | PHP version number | Low |
-| `*.hash` | Font file hashes | None |
+| File              | Contents           | Sensitivity |
+| ----------------- | ------------------ | ----------- |
+| `.bash_env_local` | Server name        | Low         |
+| `.php`            | PHP version number | Low         |
+| `*.hash`          | Font file hashes   | None        |
 
 ## Best Practices
 
 ### Before Installation
 
 1. **Backup** existing configurations:
+
    ```bash
    cp -r ~/.bashrc ~/.config/nvim ~/backup/
    ```
 
 2. **Review** the install script:
+
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/jsas4coding/ops-config/main/install | less
+   curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/install | less
    ```
 
 3. **Test** in a non-production environment first
@@ -104,31 +107,33 @@ When using OpsConfig on remote servers:
 
 Only the latest version of OpsConfig receives security updates.
 
-| Version | Supported |
-|---------|-----------|
-| Latest (main branch) | Yes |
-| Older versions | No |
+| Version              | Supported |
+| -------------------- | --------- |
+| Latest (main branch) | Yes       |
+| Older versions       | No        |
 
 ## Dependencies
 
-OpsConfig relies on third-party software. Security updates for these should be applied through your system's package manager:
+OpsConfig relies on third-party software. Security updates for these should be applied through your
+system's package manager:
 
 - Neovim
-- Node.js / NVM
+- Node.js / fnm (Fast Node Manager)
 - Python / pip packages
 - GNU Stow
 - ripgrep
 - curl / jq / git
+- htop / ncdu / tree / tmux / fd-find
 
 ## Permissions
 
 ### File Permissions
 
-| Location | Default Mode | Notes |
-|----------|--------------|-------|
-| Scripts (`/var/scripts/`) | 755 | Executable by all |
-| Config files | 644 | Readable by all |
-| `.bash_env_local` | 644 | Consider 600 for sensitive |
+| Location                  | Default Mode | Notes                      |
+| ------------------------- | ------------ | -------------------------- |
+| Scripts (`/var/scripts/`) | 755          | Executable by all          |
+| Config files              | 644          | Readable by all            |
+| `.bash_env_local`         | 644          | Consider 600 for sensitive |
 
 ### Recommendations
 
@@ -144,4 +149,5 @@ chmod 600 ~/.ssh/config
 
 ## Acknowledgments
 
-Security improvements and vulnerability reports are appreciated. Thank you for helping keep OpsConfig secure.
+Security improvements and vulnerability reports are appreciated. Thank you for helping keep
+OpsConfig secure.

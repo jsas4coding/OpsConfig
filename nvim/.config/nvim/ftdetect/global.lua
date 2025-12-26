@@ -11,7 +11,6 @@ vim.api.nvim_create_autocmd({
 
 			filename = {
 				[".bashrc"] = "sh",
-				[".projectrc"] = "sh",
 				[".bash_custom"] = "bash",
 				[".bash_logout"] = "bash",
 				[".bash_ps1"] = "bash",

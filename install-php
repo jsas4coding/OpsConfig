@@ -1,0 +1,743 @@
+#!/usr/bin/env bash
+# =============================================================================
+# OpsConfig: PHP Installation Script
+# =============================================================================
+# Installs and configures PHP with FPM, extensions, and optimized settings.
+# Supports multiple PHP versions via ondrej/php PPA (sury.org).
+# =============================================================================
+
+set -euo pipefail
+IFS=$'\n\t'
+
+# =============================================================================
+# COLORS AND ICONS
+# =============================================================================
+
+readonly RED="\e[31m"
+readonly GREEN="\e[32m"
+readonly YELLOW="\e[33m"
+readonly CYAN="\e[36m"
+readonly WHITE="\e[97m"
+readonly MAGENTA="\e[35m"
+readonly RESET="\e[0m"
+
+readonly SUCCESS_ICON="[OK] "
+readonly ERROR_ICON="[ERR] "
+readonly WARNING_ICON="[WARN] "
+readonly INFO_ICON="[INFO] "
+readonly PHP_ICON="[PHP] "
+readonly CONFIG_ICON="[CFG] "
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+readonly CONFIG_DIR="${HOME}/.config/opsconfig"
+readonly PHP_CONFIG_DIR="${CONFIG_DIR}/php"
+
+# Extensions (always install full set)
+readonly PHP_EXTENSIONS="cli common fpm bcmath curl gd imagick imap intl mbstring mysql opcache phpdbg readline soap sqlite3 tidy xml xsl yaml zip"
+
+# Default configuration values
+DEFAULT_MEMORY_LIMIT="512M"
+DEFAULT_MAX_EXECUTION_TIME="180"
+DEFAULT_MAX_INPUT_TIME="60"
+DEFAULT_MAX_INPUT_VARS="20000"
+DEFAULT_POST_MAX_SIZE="128M"
+DEFAULT_UPLOAD_MAX_SIZE="128M"
+DEFAULT_MAX_FILE_UPLOADS="20"
+
+# FPM defaults
+DEFAULT_PM_TYPE="dynamic"
+DEFAULT_PM_MAX_CHILDREN="5"
+DEFAULT_PM_START_SERVERS="2"
+DEFAULT_PM_MIN_SPARE="1"
+DEFAULT_PM_MAX_SPARE="3"
+DEFAULT_PM_MAX_REQUESTS="500"
+DEFAULT_REQUEST_TIMEOUT="60s"
+DEFAULT_SLOWLOG_TIMEOUT="5s"
+
+# =============================================================================
+# GLOBALS
+# =============================================================================
+
+PHP_VERSION=""
+SET_DEFAULT="false"
+INSTALL_FPM="true"
+
+# PHP Configuration
+MEMORY_LIMIT="${DEFAULT_MEMORY_LIMIT}"
+MAX_EXECUTION_TIME="${DEFAULT_MAX_EXECUTION_TIME}"
+MAX_INPUT_TIME="${DEFAULT_MAX_INPUT_TIME}"
+MAX_INPUT_VARS="${DEFAULT_MAX_INPUT_VARS}"
+POST_MAX_SIZE="${DEFAULT_POST_MAX_SIZE}"
+UPLOAD_MAX_SIZE="${DEFAULT_UPLOAD_MAX_SIZE}"
+MAX_FILE_UPLOADS="${DEFAULT_MAX_FILE_UPLOADS}"
+
+# FPM Configuration
+FPM_USER=""
+FPM_GROUP=""
+FPM_POOL_NAME=""
+PM_TYPE="${DEFAULT_PM_TYPE}"
+PM_MAX_CHILDREN="${DEFAULT_PM_MAX_CHILDREN}"
+PM_START_SERVERS="${DEFAULT_PM_START_SERVERS}"
+PM_MIN_SPARE="${DEFAULT_PM_MIN_SPARE}"
+PM_MAX_SPARE="${DEFAULT_PM_MAX_SPARE}"
+PM_MAX_REQUESTS="${DEFAULT_PM_MAX_REQUESTS}"
+REQUEST_TIMEOUT="${DEFAULT_REQUEST_TIMEOUT}"
+SLOWLOG_TIMEOUT="${DEFAULT_SLOWLOG_TIMEOUT}"
+
+# =============================================================================
+# LOGGING FUNCTIONS
+# =============================================================================
+
+msg() {
+  local type="$1"
+  local text="$2"
+  local icon=""
+  local color=""
+
+  case "$type" in
+    success)
+      icon="$SUCCESS_ICON"
+      color="$GREEN"
+      ;;
+    error)
+      icon="$ERROR_ICON"
+      color="$RED"
+      ;;
+    warning)
+      icon="$WARNING_ICON"
+      color="$YELLOW"
+      ;;
+    info)
+      icon="$INFO_ICON"
+      color="$CYAN"
+      ;;
+    php)
+      icon="$PHP_ICON"
+      color="$MAGENTA"
+      ;;
+    config)
+      icon="$CONFIG_ICON"
+      color="$CYAN"
+      ;;
+    *)
+      icon=" "
+      color="$WHITE"
+      ;;
+  esac
+
+  echo -e "${color}${icon}${text}${RESET}"
+}
+
+# =============================================================================
+# UTILITY FUNCTIONS
+# =============================================================================
+
+check_root() {
+  if [[ $EUID -ne 0 ]]; then
+    msg error "This script must be run as root."
+    msg info "Usage: sudo $0 <version>"
+    exit 1
+  fi
+}
+
+validate_version() {
+  local version="$1"
+
+  # Check format (e.g., 8.3, 8.4, 7.4)
+  if ! [[ ${version} =~ ^[0-9]+\.[0-9]+$ ]]; then
+    msg error "Invalid PHP version format: ${version}"
+    msg info "Use format: X.Y (e.g., 8.3, 8.4, 7.4)"
+    exit 1
+  fi
+
+  PHP_VERSION="${version}"
+}
+
+check_existing_installation() {
+  if dpkg -l | grep -q "php${PHP_VERSION}-cli"; then
+    msg warning "PHP ${PHP_VERSION} is already installed."
+    return 0
+  fi
+  return 1
+}
+
+get_installed_extensions() {
+  dpkg -l | grep "^ii" | grep "php${PHP_VERSION}-" | awk '{print $2}' | sed "s/php${PHP_VERSION}-//" | sort
+}
+
+# =============================================================================
+# INPUT FUNCTIONS
+# =============================================================================
+
+ask_input() {
+  local var_name="$1"
+  local prompt="$2"
+  local default="$3"
+
+  local result
+  if command -v whiptail &>/dev/null; then
+    result=$(whiptail --inputbox "${prompt}" 10 60 "${default}" --title "PHP ${PHP_VERSION} Setup" 3>&1 1>&2 2>&3) || result="${default}"
+  else
+    echo -en "${CYAN}${prompt} [${default}]: ${RESET}"
+    read -r result
+    result="${result:-${default}}"
+  fi
+
+  printf -v "${var_name}" '%s' "${result}"
+}
+
+ask_yes_no() {
+  local var_name="$1"
+  local prompt="$2"
+  local default="$3"
+
+  local result
+  if command -v whiptail &>/dev/null; then
+    local default_flag=""
+    [[ ${default} == "false" ]] && default_flag="--defaultno"
+    if whiptail --yesno "${prompt}" 10 60 ${default_flag} --title "PHP ${PHP_VERSION} Setup" 3>&1 1>&2 2>&3; then
+      result="true"
+    else
+      result="false"
+    fi
+  else
+    local yn_default="Y/n"
+    [[ ${default} == "false" ]] && yn_default="y/N"
+    echo -en "${CYAN}${prompt} [${yn_default}]: ${RESET}"
+    read -r answer
+    case "${answer,,}" in
+      y | yes) result="true" ;;
+      n | no) result="false" ;;
+      *) result="${default}" ;;
+    esac
+  fi
+
+  printf -v "${var_name}" '%s' "${result}"
+}
+
+ask_menu() {
+  local var_name="$1"
+  local prompt="$2"
+  local default="$3"
+  shift 3
+  local options=("$@")
+
+  local result
+  if command -v whiptail &>/dev/null; then
+    local menu_items=()
+    local i=1
+    for opt in "${options[@]}"; do
+      menu_items+=("${opt}" "")
+      ((i++))
+    done
+
+    result=$(whiptail --menu "${prompt}" 16 60 6 "${menu_items[@]}" --title "PHP ${PHP_VERSION} Setup" 3>&1 1>&2 2>&3) || result="${default}"
+  else
+    echo -e "${CYAN}${prompt}${RESET}"
+    local i=1
+    for opt in "${options[@]}"; do
+      echo "  ${i}) ${opt}"
+      ((i++))
+    done
+    echo -en "${CYAN}Choice [${default}]: ${RESET}"
+    read -r choice
+    if [[ -n ${choice} ]] && [[ ${choice} =~ ^[0-9]+$ ]] && [[ ${choice} -ge 1 ]] && [[ ${choice} -le ${#options[@]} ]]; then
+      result="${options[$((choice - 1))]}"
+    else
+      result="${default}"
+    fi
+  fi
+
+  printf -v "${var_name}" '%s' "${result}"
+}
+
+# =============================================================================
+# CONFIGURATION WIZARD
+# =============================================================================
+
+run_wizard() {
+  msg config "Starting PHP ${PHP_VERSION} configuration wizard..."
+  echo ""
+
+  # Basic options
+  ask_yes_no "SET_DEFAULT" "Set PHP ${PHP_VERSION} as default CLI version?" "true"
+  ask_yes_no "INSTALL_FPM" "Install PHP-FPM (FastCGI Process Manager)?" "true"
+
+  # PHP Configuration
+  echo ""
+  msg config "PHP Runtime Configuration"
+  ask_input "MEMORY_LIMIT" "Memory limit (e.g., 256M, 512M, 1G):" "${DEFAULT_MEMORY_LIMIT}"
+  ask_input "MAX_EXECUTION_TIME" "Max execution time (seconds):" "${DEFAULT_MAX_EXECUTION_TIME}"
+  ask_input "POST_MAX_SIZE" "Post max size (e.g., 128M, 700M):" "${DEFAULT_POST_MAX_SIZE}"
+  ask_input "UPLOAD_MAX_SIZE" "Upload max filesize:" "${POST_MAX_SIZE}"
+
+  # FPM Configuration
+  if [[ ${INSTALL_FPM} == "true" ]]; then
+    echo ""
+    msg config "PHP-FPM Pool Configuration"
+
+    # Get current user as default
+    local current_user
+    current_user=$(logname 2>/dev/null || echo "${SUDO_USER:-www-data}")
+
+    ask_input "FPM_USER" "FPM pool user:" "${current_user}"
+    ask_input "FPM_GROUP" "FPM pool group:" "${FPM_USER}"
+    ask_input "FPM_POOL_NAME" "FPM pool name:" "${FPM_USER}-php${PHP_VERSION//./}"
+
+    echo ""
+    msg config "FPM Process Manager Settings"
+    ask_menu "PM_TYPE" "Process manager type:" "dynamic" "dynamic" "static" "ondemand"
+    ask_input "PM_MAX_CHILDREN" "Max children processes:" "${DEFAULT_PM_MAX_CHILDREN}"
+
+    if [[ ${PM_TYPE} == "dynamic" ]]; then
+      ask_input "PM_START_SERVERS" "Start servers:" "${DEFAULT_PM_START_SERVERS}"
+      ask_input "PM_MIN_SPARE" "Min spare servers:" "${DEFAULT_PM_MIN_SPARE}"
+      ask_input "PM_MAX_SPARE" "Max spare servers:" "${DEFAULT_PM_MAX_SPARE}"
+    fi
+
+    ask_input "PM_MAX_REQUESTS" "Max requests per child (0=unlimited):" "${DEFAULT_PM_MAX_REQUESTS}"
+    ask_input "REQUEST_TIMEOUT" "Request terminate timeout (e.g., 60s):" "${DEFAULT_REQUEST_TIMEOUT}"
+    ask_input "SLOWLOG_TIMEOUT" "Slow log timeout (e.g., 5s):" "${DEFAULT_SLOWLOG_TIMEOUT}"
+  fi
+
+  echo ""
+}
+
+# =============================================================================
+# INSTALLATION FUNCTIONS
+# =============================================================================
+
+update_package_list() {
+  msg php "Updating package list..."
+  apt-get update -qq
+}
+
+get_extensions_list() {
+  # Add version prefix to each extension
+  local versioned=""
+  for ext in ${PHP_EXTENSIONS}; do
+    versioned+="php${PHP_VERSION}-${ext} "
+  done
+
+  echo "${versioned}"
+}
+
+install_packages() {
+  msg php "Installing PHP ${PHP_VERSION} packages..."
+
+  local packages
+  packages=$(get_extensions_list)
+
+  msg info "Installing: ${packages}"
+
+  # shellcheck disable=SC2086
+  if apt-get install -y ${packages}; then
+    msg success "PHP ${PHP_VERSION} packages installed successfully."
+  else
+    msg error "Failed to install some packages."
+    exit 1
+  fi
+}
+
+set_default_cli() {
+  if [[ ${SET_DEFAULT} != "true" ]]; then
+    msg info "Skipping default CLI setup."
+    return 0
+  fi
+
+  msg php "Setting PHP ${PHP_VERSION} as default CLI..."
+
+  # Update alternatives
+  update-alternatives --set php "/usr/bin/php${PHP_VERSION}" 2>/dev/null ||
+    update-alternatives --install /usr/bin/php php "/usr/bin/php${PHP_VERSION}" 100
+
+  # Update other binaries if they exist
+  for bin in phar phar.phar php-config phpize; do
+    if [[ -f "/usr/bin/${bin}${PHP_VERSION}" ]]; then
+      update-alternatives --set "${bin}" "/usr/bin/${bin}${PHP_VERSION}" 2>/dev/null ||
+        update-alternatives --install "/usr/bin/${bin}" "${bin}" "/usr/bin/${bin}${PHP_VERSION}" 100
+    fi
+  done
+
+  # Update OpsConfig config
+  mkdir -p "${CONFIG_DIR}"
+  echo "${PHP_VERSION}" >"${CONFIG_DIR}/.php"
+
+  msg success "PHP ${PHP_VERSION} set as default CLI."
+  php -v
+}
+
+create_php_config() {
+  msg config "Creating PHP configuration..."
+
+  local cli_conf_dir="/etc/php/${PHP_VERSION}/cli/conf.d"
+  local fpm_conf_dir="/etc/php/${PHP_VERSION}/fpm/conf.d"
+  local config_file="99-opsconfig.ini"
+
+  # Create configuration content
+  local config_content
+  config_content=$(
+    cat <<EOF
+; =============================================================================
+; OpsConfig PHP Configuration
+; =============================================================================
+; Generated by OpsConfig install-php script
+; Location: /etc/php/${PHP_VERSION}/{cli,fpm}/conf.d/${config_file}
+; =============================================================================
+
+; Resource Limits
+max_execution_time = ${MAX_EXECUTION_TIME}
+max_input_time = ${MAX_INPUT_TIME}
+max_input_vars = ${MAX_INPUT_VARS}
+memory_limit = ${MEMORY_LIMIT}
+
+; POST / Upload Limits
+post_max_size = ${POST_MAX_SIZE}
+upload_max_filesize = ${UPLOAD_MAX_SIZE}
+max_file_uploads = ${MAX_FILE_UPLOADS}
+
+; Security
+expose_php = Off
+display_errors = Off
+log_errors = On
+
+; Timezone
+[Date]
+date.timezone = America/Sao_Paulo
+date.default_latitude = -23.533773
+date.default_longitude = -46.625290
+EOF
+  )
+
+  # OPcache configuration for PHP 8+
+  local major_version="${PHP_VERSION%%.*}"
+  if [[ ${major_version} -ge 8 ]]; then
+    config_content+=$(
+      cat <<'EOF'
+
+; =============================================================================
+; OPcache Configuration (PHP 8+)
+; =============================================================================
+
+[opcache]
+opcache.enable = 1
+opcache.enable_cli = 0
+opcache.memory_consumption = 256
+opcache.interned_strings_buffer = 16
+opcache.max_accelerated_files = 10000
+opcache.revalidate_freq = 2
+opcache.fast_shutdown = 1
+opcache.validate_timestamps = 1
+EOF
+    )
+  fi
+
+  # Write CLI configuration
+  if [[ -d ${cli_conf_dir} ]]; then
+    echo "${config_content}" >"${cli_conf_dir}/${config_file}"
+    msg success "CLI config: ${cli_conf_dir}/${config_file}"
+  fi
+
+  # Write FPM configuration
+  if [[ -d ${fpm_conf_dir} ]]; then
+    echo "${config_content}" >"${fpm_conf_dir}/${config_file}"
+    msg success "FPM config: ${fpm_conf_dir}/${config_file}"
+  fi
+}
+
+create_fpm_pool() {
+  if [[ ${INSTALL_FPM} != "true" ]]; then
+    msg info "Skipping FPM pool creation."
+    return 0
+  fi
+
+  msg config "Creating PHP-FPM pool..."
+
+  local pool_dir="/etc/php/${PHP_VERSION}/fpm/pool.d"
+  local pool_file="${pool_dir}/${FPM_POOL_NAME}.conf"
+  local log_dir="/var/log/php${PHP_VERSION}-fpm"
+  local run_dir="/run/php"
+
+  # Create directories
+  mkdir -p "${log_dir}"
+  mkdir -p "${run_dir}"
+
+  # Set ownership
+  chown "${FPM_USER}:${FPM_GROUP}" "${log_dir}" 2>/dev/null || true
+
+  # Build process manager configuration
+  local pm_config=""
+  case "${PM_TYPE}" in
+    dynamic)
+      pm_config="pm = dynamic
+pm.max_children = ${PM_MAX_CHILDREN}
+pm.start_servers = ${PM_START_SERVERS}
+pm.min_spare_servers = ${PM_MIN_SPARE}
+pm.max_spare_servers = ${PM_MAX_SPARE}"
+      ;;
+    static)
+      pm_config="pm = static
+pm.max_children = ${PM_MAX_CHILDREN}"
+      ;;
+    ondemand)
+      pm_config="pm = ondemand
+pm.max_children = ${PM_MAX_CHILDREN}
+pm.process_idle_timeout = 10s"
+      ;;
+  esac
+
+  # Create pool configuration
+  cat >"${pool_file}" <<EOF
+; =============================================================================
+; OpsConfig PHP-FPM Pool: ${FPM_POOL_NAME}
+; =============================================================================
+; Generated by OpsConfig install-php script
+; Location: ${pool_file}
+; =============================================================================
+
+[${FPM_POOL_NAME}]
+
+; Process Owner
+user = ${FPM_USER}
+group = ${FPM_GROUP}
+
+; Socket Configuration
+listen = ${run_dir}/php${PHP_VERSION}-fpm-${FPM_POOL_NAME}.sock
+listen.owner = ${FPM_USER}
+listen.group = ${FPM_GROUP}
+listen.mode = 0660
+
+; Process Manager
+${pm_config}
+pm.max_requests = ${PM_MAX_REQUESTS}
+
+; Timeouts and Logging
+request_terminate_timeout = ${REQUEST_TIMEOUT}
+request_slowlog_timeout = ${SLOWLOG_TIMEOUT}
+slowlog = ${log_dir}/${FPM_POOL_NAME}.slow.log
+
+; Health and Status (wire in Nginx for monitoring)
+pm.status_path = /fpm-status
+ping.path = /fpm-ping
+ping.response = pong
+
+; Security
+; clear_env = yes
+security.limit_extensions = .php
+
+; Environment Variables (customize as needed)
+; env[HOSTNAME] = \$HOSTNAME
+; env[TMP] = /tmp
+; env[TMPDIR] = /tmp
+; env[TEMP] = /tmp
+EOF
+
+  msg success "FPM pool created: ${pool_file}"
+  msg info "Socket: ${run_dir}/php${PHP_VERSION}-fpm-${FPM_POOL_NAME}.sock"
+
+  # Disable default www pool if our pool is different
+  local default_pool="${pool_dir}/www.conf"
+  if [[ -f ${default_pool} ]] && [[ ${FPM_POOL_NAME} != "www" ]]; then
+    if [[ ! -f "${default_pool}.disabled" ]]; then
+      mv "${default_pool}" "${default_pool}.disabled"
+      msg info "Disabled default www pool."
+    fi
+  fi
+}
+
+restart_services() {
+  msg php "Restarting PHP-FPM service..."
+
+  if systemctl is-active --quiet "php${PHP_VERSION}-fpm"; then
+    systemctl restart "php${PHP_VERSION}-fpm"
+    msg success "PHP-FPM ${PHP_VERSION} restarted."
+  else
+    systemctl start "php${PHP_VERSION}-fpm" 2>/dev/null || true
+    systemctl enable "php${PHP_VERSION}-fpm" 2>/dev/null || true
+    msg success "PHP-FPM ${PHP_VERSION} started and enabled."
+  fi
+}
+
+save_configuration() {
+  msg config "Saving configuration..."
+
+  mkdir -p "${PHP_CONFIG_DIR}"
+
+  cat >"${PHP_CONFIG_DIR}/php${PHP_VERSION}.conf" <<EOF
+# OpsConfig PHP ${PHP_VERSION} Configuration
+# Generated: $(date -Iseconds)
+
+PHP_VERSION="${PHP_VERSION}"
+SET_DEFAULT="${SET_DEFAULT}"
+INSTALL_FPM="${INSTALL_FPM}"
+
+# PHP Settings
+MEMORY_LIMIT="${MEMORY_LIMIT}"
+MAX_EXECUTION_TIME="${MAX_EXECUTION_TIME}"
+MAX_INPUT_TIME="${MAX_INPUT_TIME}"
+MAX_INPUT_VARS="${MAX_INPUT_VARS}"
+POST_MAX_SIZE="${POST_MAX_SIZE}"
+UPLOAD_MAX_SIZE="${UPLOAD_MAX_SIZE}"
+MAX_FILE_UPLOADS="${MAX_FILE_UPLOADS}"
+
+# FPM Settings
+FPM_USER="${FPM_USER}"
+FPM_GROUP="${FPM_GROUP}"
+FPM_POOL_NAME="${FPM_POOL_NAME}"
+PM_TYPE="${PM_TYPE}"
+PM_MAX_CHILDREN="${PM_MAX_CHILDREN}"
+PM_START_SERVERS="${PM_START_SERVERS}"
+PM_MIN_SPARE="${PM_MIN_SPARE}"
+PM_MAX_SPARE="${PM_MAX_SPARE}"
+PM_MAX_REQUESTS="${PM_MAX_REQUESTS}"
+REQUEST_TIMEOUT="${REQUEST_TIMEOUT}"
+SLOWLOG_TIMEOUT="${SLOWLOG_TIMEOUT}"
+EOF
+
+  msg success "Configuration saved: ${PHP_CONFIG_DIR}/php${PHP_VERSION}.conf"
+}
+
+show_summary() {
+  echo ""
+  msg success "=== PHP ${PHP_VERSION} Installation Complete ==="
+  echo ""
+
+  msg info "PHP Version: $("php${PHP_VERSION}" -v | head -1)"
+  msg info "Extensions: ${PHP_EXTENSIONS}"
+  msg info "Default CLI: ${SET_DEFAULT}"
+
+  if [[ ${INSTALL_FPM} == "true" ]]; then
+    echo ""
+    msg info "FPM Pool: ${FPM_POOL_NAME}"
+    msg info "FPM User: ${FPM_USER}:${FPM_GROUP}"
+    msg info "FPM Socket: /run/php/php${PHP_VERSION}-fpm-${FPM_POOL_NAME}.sock"
+    msg info "FPM Status: systemctl status php${PHP_VERSION}-fpm"
+  fi
+
+  echo ""
+  msg info "Configuration files:"
+  msg info "  CLI: /etc/php/${PHP_VERSION}/cli/conf.d/99-opsconfig.ini"
+  if [[ ${INSTALL_FPM} == "true" ]]; then
+    msg info "  FPM: /etc/php/${PHP_VERSION}/fpm/conf.d/99-opsconfig.ini"
+    msg info "  Pool: /etc/php/${PHP_VERSION}/fpm/pool.d/${FPM_POOL_NAME}.conf"
+  fi
+
+  echo ""
+  msg info "Nginx example configuration:"
+  echo ""
+  echo '    location ~ \.php$ {'
+  echo "        fastcgi_pass unix:/run/php/php${PHP_VERSION}-fpm-${FPM_POOL_NAME}.sock;"
+  echo '        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;'
+  echo "        include fastcgi_params;"
+  echo "    }"
+  echo ""
+}
+
+show_help() {
+  cat <<EOF
+OpsConfig: PHP Installation Script
+
+Usage: $(basename "$0") <version> [OPTIONS]
+
+Arguments:
+  version       PHP version to install (e.g., 8.3, 8.4, 7.4)
+
+Options:
+  --no-wizard   Skip interactive wizard, use defaults
+  --help        Show this help message
+
+Examples:
+  $(basename "$0") 8.4              # Install PHP 8.4 with wizard
+  $(basename "$0") 8.4 --no-wizard  # Install with defaults
+
+Extensions installed:
+  bcmath, curl, gd, imagick, imap, intl, mbstring, mysql, opcache,
+  phpdbg, readline, soap, sqlite3, tidy, xml, xsl, yaml, zip
+
+EOF
+}
+
+# =============================================================================
+# MAIN
+# =============================================================================
+
+main() {
+  local skip_wizard=false
+
+  # Parse arguments
+  if [[ $# -eq 0 ]]; then
+    show_help
+    exit 1
+  fi
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --no-wizard) skip_wizard=true ;;
+      --help | -h)
+        show_help
+        exit 0
+        ;;
+      -*)
+        msg error "Unknown option: $1"
+        show_help
+        exit 1
+        ;;
+      *)
+        if [[ -z ${PHP_VERSION} ]]; then
+          validate_version "$1"
+        else
+          msg error "Unexpected argument: $1"
+          exit 1
+        fi
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z ${PHP_VERSION} ]]; then
+    msg error "PHP version is required."
+    show_help
+    exit 1
+  fi
+
+  echo ""
+  msg php "=== OpsConfig: PHP ${PHP_VERSION} Installation ==="
+  echo ""
+
+  check_root
+
+  # Load existing config if updating
+  local existing_config="${PHP_CONFIG_DIR}/php${PHP_VERSION}.conf"
+  if [[ -f ${existing_config} ]]; then
+    msg info "Loading existing configuration..."
+    # shellcheck disable=SC1090
+    source "${existing_config}"
+  fi
+
+  # Run wizard or use defaults
+  if [[ ${skip_wizard} != "true" ]]; then
+    run_wizard
+  else
+    msg info "Using default configuration (--no-wizard)"
+    # Set FPM defaults if not loaded from config
+    FPM_USER="${FPM_USER:-www-data}"
+    FPM_GROUP="${FPM_GROUP:-www-data}"
+    FPM_POOL_NAME="${FPM_POOL_NAME:-www}"
+  fi
+
+  # Installation steps
+  update_package_list
+  install_packages
+  set_default_cli
+  create_php_config
+  create_fpm_pool
+  restart_services
+  save_configuration
+
+  show_summary
+}
+
+main "$@"
