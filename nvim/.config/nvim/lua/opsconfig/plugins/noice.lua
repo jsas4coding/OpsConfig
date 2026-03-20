@@ -160,11 +160,11 @@ return {
           ['%[.-%]%((%S-)%)'] = require('noice.util').open, -- markdown links
         },
         highlights = {
-          ['|%S-|'] = '@text.reference',
+          ['|%S-|'] = '@markup.link',
           ['@%S+'] = '@parameter',
-          ['^%s*(Parameters:)'] = '@text.title',
-          ['^%s*(Return:)'] = '@text.title',
-          ['^%s*(See also:)'] = '@text.title',
+          ['^%s*(Parameters:)'] = '@markup.heading',
+          ['^%s*(Return:)'] = '@markup.heading',
+          ['^%s*(See also:)'] = '@markup.heading',
           ['{%S-}'] = '@parameter',
         },
       },

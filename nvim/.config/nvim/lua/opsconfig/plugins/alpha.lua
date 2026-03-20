@@ -31,7 +31,6 @@ return {
     dashboard.section.buttons.val = {
       dashboard.button('e', '[+] New File', '<cmd>ene<CR>'),
       dashboard.button('SPC ee', '[E] File Explorer', '<cmd>NvimTreeToggle<CR>'),
-      dashboard.button('SPC wr', '[R] Restore Session', '<cmd>SessionRestore<CR>'),
       dashboard.button('q', '[X] Quit NVIM', '<cmd>qa<CR>'),
     }
 

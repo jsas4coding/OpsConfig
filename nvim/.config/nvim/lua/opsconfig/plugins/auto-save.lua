@@ -60,7 +60,7 @@ return {
           'diff', -- diff view
           'fugitive', -- fugitive buffers
           'notify', -- nvim-notify (noice)
-          'snacks_input', -- input temporário (custom plugin)
+          'snacks_input', -- temporary input buffer (custom plugin)
           'snacks_picker_input',
           'noice', -- noice.nvim popup
           'dap-repl', -- DAP REPL

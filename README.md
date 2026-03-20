@@ -69,7 +69,7 @@ and power users who rely heavily on terminal and Neovim workflows.
 ## Installation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/install | bash
+curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/bin/install | bash
 ```
 
 ### What Gets Installed
@@ -88,29 +88,29 @@ curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/install 
 
 ```bash
 # Standard installation (interactive wizard)
-curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/install | bash
+curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/bin/install | bash
 
 # Force Python environment rebuild
-curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/install | bash -s -- --force
+curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/bin/install | bash -s -- --force
 
 # Skip configuration wizard (use existing config)
-curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/install | bash -s -- --no-wizard
+curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/bin/install | bash -s -- --no-wizard
 ```
 
 ### Configuration File
 
 The installer creates a configuration at `~/.config/opsconfig/config`:
 
-| Setting              | Description                   | Default                      |
-| -------------------- | ----------------------------- | ---------------------------- |
-| `SERVER_NAME`        | Displayed in shell prompt     | hostname                     |
-| `PHP_VERSION`        | PHP CLI version               | (empty)                      |
-| `NODE_VERSION`       | Node.js version for fnm       | 22                           |
-| `INSTALL_FONTS`      | Install Nerd Fonts            | true                         |
-| `FONTS`              | Fonts to install              | JetBrainsMono FiraCode       |
-| `INSTALL_FZF`        | Install fzf fuzzy finder      | true                         |
-| `INSTALL_PYTHON_ENV` | Python environment for Neovim | true                         |
-| `PYTHON_PACKAGES`    | Python packages to install    | neovim pynvim black requests |
+| Setting              | Description                   | Default                              |
+| -------------------- | ----------------------------- | ------------------------------------ |
+| `SERVER_NAME`        | Displayed in shell prompt     | hostname                             |
+| `PHP_VERSION`        | PHP CLI version               | (empty)                              |
+| `NODE_VERSION`       | Node.js version for fnm       | 22                                   |
+| `INSTALL_FONTS`      | Install Nerd Fonts            | true                                 |
+| `FONTS`              | Fonts to install              | JetBrainsMono FiraCode               |
+| `INSTALL_FZF`        | Install fzf fuzzy finder      | true                                 |
+| `INSTALL_PYTHON_ENV` | Python environment for Neovim | true                                 |
+| `PYTHON_PACKAGES`    | Python packages to install    | neovim tasklib pynvim requests black |
 
 ### Migration from NVM to fnm
 
@@ -118,13 +118,13 @@ If you're migrating from an existing NVM installation:
 
 ```bash
 # Preview migration (dry run)
-~/.opsconfig/upgrade-node-manager --dry-run
+~/.opsconfig/bin/upgrade-node-manager --dry-run
 
 # Full migration
-~/.opsconfig/upgrade-node-manager
+~/.opsconfig/bin/upgrade-node-manager
 
 # Keep NVM after migration
-~/.opsconfig/upgrade-node-manager --keep-nvm
+~/.opsconfig/bin/upgrade-node-manager --keep-nvm
 ```
 
 The migration script:
@@ -141,10 +141,10 @@ Install and configure PHP with FPM:
 
 ```bash
 # Install PHP 8.4 with interactive wizard
-sudo ~/.opsconfig/install-php 8.4
+sudo ~/.opsconfig/bin/install-php 8.4
 
 # Install with default settings
-sudo ~/.opsconfig/install-php 8.3 --no-wizard
+sudo ~/.opsconfig/bin/install-php 8.3 --no-wizard
 ```
 
 The script installs:
@@ -160,7 +160,7 @@ The script installs:
 
 ### Minimum Requirements
 
-- **OS**: Ubuntu 20.04+, Debian 11+, Fedora 36+, Alpine 3.16+
+- **OS**: Ubuntu 20.04+, Debian 11+
 - **RAM**: 512MB (1GB recommended)
 - **Disk**: 500MB free space
 - **Terminal**: Any terminal with UTF-8 support
@@ -208,13 +208,17 @@ opsconfig/
 │       │   │   ├── fzf-lua.lua    # Fuzzy finder
 │       │   │   ├── catppuccin.lua # Color scheme
 │       │   │   ├── nvim-tree.lua  # File explorer
-│       │   │   ├── lspconfig.lua  # LSP configuration
+│       │   │   ├── nvim-lspconfig.lua  # LSP configuration
 │       │   │   └── ...            # Other plugins
 │       │   └── behaviors/         # Terminal integrations
 │       └── lazy.lua               # Plugin manager bootstrap
-├── scripts/                       # Utility scripts
-│   └── neovim                     # Neovim wrapper with Python env
-├── install                        # Installation script
+├── bin/                           # Scripts and utilities
+│   ├── install                    # Installation script
+│   ├── install-php                # PHP installation script
+│   ├── update                     # Update script
+│   ├── upgrade-node-manager       # NVM to fnm migration
+│   ├── neovim                     # Neovim wrapper with Python env
+│   └── test-clipboard             # Clipboard integration test
 ├── LICENSE                        # MIT License
 └── SECURITY.md                    # Security policy
 ```
@@ -342,7 +346,7 @@ Comprehensive system update:
 
 1. Runs `before_install` hook (if exists)
 2. Updates OpsConfig from GitHub
-3. Updates system packages (apt/dnf/yum/apk)
+3. Updates system packages (apt)
 4. Updates Composer (if PHP available)
 5. Runs `after_install` hook (if exists)
 6. Reloads bash configuration
@@ -356,12 +360,6 @@ SSH-aware clipboard function:
 - **Local (X11)**: Uses xclip or xsel
 - **macOS**: Uses pbcopy
 - **Fallback**: OSC52 for any terminal
-
-#### `detect_distro`
-
-Returns current Linux distribution:
-
-- ubuntu, debian, fedora, centos, rhel, rocky, almalinux, alpine, unknown
 
 ### Shell Options
 

@@ -24,15 +24,10 @@ local plugin_files = {
   -- File management
   'nvim-tree',           -- File explorer
   'fzf-lua',             -- Fast fuzzy finder
-  'telescope-fzf-native', -- FZF integration for telescope
-  'telescope-frecency',   -- Frecency algorithm for telescope
-  'telescope-ui-select',  -- UI select replacement
-  'telescope',           -- Main fuzzy finder
-  
+
   -- Code intelligence and LSP
   'mason',               -- LSP/tool installer
   'nvim-lspconfig',      -- LSP configuration
-  'nvim-cmp',            -- Completion engine
   'lazydev',             -- Lua development support
   'fidget',              -- LSP progress notifications
   

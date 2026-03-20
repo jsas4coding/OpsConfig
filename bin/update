@@ -7,42 +7,18 @@
 # =============================================================================
 
 set -euo pipefail
+IFS=$'\n\t'
+
+# shellcheck source=lib/common.sh
+source "$(dirname "$0")/lib/common.sh"
 
 # =============================================================================
-# COLORS AND ICONS
+# CLEANUP
 # =============================================================================
 
-RED="\e[31m"
-GREEN="\e[32m"
-YELLOW="\e[33m"
-CYAN="\e[36m"
-WHITE="\e[97m"
-MAGENTA="\e[35m"
-RESET="\e[0m"
-
-SUCCESS_ICON="[OK] "
-ERROR_ICON="[ERR] "
-WARNING_ICON="[WARN] "
-INFO_ICON="[INFO] "
-CLEAN_ICON="[CLN] "
-
-msg() {
-  local type="$1"
-  local text="$2"
-  local icon=""
-  local color=""
-
-  case "$type" in
-    success) icon="$SUCCESS_ICON"; color="$GREEN" ;;
-    error) icon="$ERROR_ICON"; color="$RED" ;;
-    warning) icon="$WARNING_ICON"; color="$YELLOW" ;;
-    info) icon="$INFO_ICON"; color="$CYAN" ;;
-    clean) icon="$CLEAN_ICON"; color="$MAGENTA" ;;
-    *) icon=" "; color="$WHITE" ;;
-  esac
-
-  echo -e "${color}${icon}${text}${RESET}"
-}
+CLEANUP_FILES=()
+cleanup() { rm -f "${CLEANUP_FILES[@]}"; }
+trap cleanup EXIT INT TERM HUP
 
 # =============================================================================
 # CONFIGURATION
@@ -50,7 +26,7 @@ msg() {
 
 CONFIG_DIR="${HOME}/.config/opsconfig"
 CONFIG_FILE="${CONFIG_DIR}/config"
-OPSCONFIG_REPO="https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/install"
+OPSCONFIG_REPO="https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/bin/install"
 
 # =============================================================================
 # HOOK EXECUTION
@@ -88,6 +64,9 @@ _source_hook() {
 
   if [[ -f "${hook_file}" ]] && [[ "${HOOKS_AUTHORIZED}" == "true" ]]; then
     msg info "Running ${hook_name} hook..."
+    msg info "Hook contents:"
+    cat "${hook_file}"
+    echo ""
     # shellcheck disable=SC1090
     source "${hook_file}"
   fi
@@ -305,11 +284,7 @@ cleanup_server() {
 # =============================================================================
 
 reload_bash() {
-  if [[ -f "${HOME}/.bashrc" ]]; then
-    msg info "Reloading bash configuration..."
-    # shellcheck disable=SC1091
-    source "${HOME}/.bashrc"
-  fi
+  msg info "Reload your shell to apply changes: source ~/.bashrc"
 }
 
 # =============================================================================
@@ -325,12 +300,17 @@ main() {
     case "$1" in
       --no-cleanup) skip_cleanup=true ;;
       --cleanup-only) only_cleanup=true ;;
+      --version|-V)
+        echo "OpsConfig v${OPSCONFIG_VERSION}"
+        exit 0
+        ;;
       -h|--help)
         echo "Usage: update [OPTIONS]"
         echo ""
         echo "Options:"
         echo "  --no-cleanup     Skip server cleanup"
         echo "  --cleanup-only   Only run server cleanup"
+        echo "  --version, -V    Show version"
         echo "  -h, --help       Show this help"
         exit 0
         ;;

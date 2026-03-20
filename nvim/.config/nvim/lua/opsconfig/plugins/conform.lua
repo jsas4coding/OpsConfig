@@ -65,7 +65,7 @@ return {
       formatters_by_ft = formatters_by_ft,
 
       format_on_save = function(bufnr)
-        conform.format(vim.tbl_extend('force', { bufnr = bufnr }, format_opts))
+        return vim.tbl_extend('force', { bufnr = bufnr }, format_opts)
       end,
     })
   end,

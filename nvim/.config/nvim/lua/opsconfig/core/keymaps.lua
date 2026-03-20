@@ -579,7 +579,7 @@ local keymaps = function()
       modes = 'n',
       lhs = '<leader>lR',
       rhs = function()
-        for _, client in pairs(vim.lsp.get_active_clients()) do
+        for _, client in pairs(vim.lsp.get_clients()) do
           client.stop()
         end
 
@@ -662,57 +662,6 @@ local keymaps = function()
         vim.lsp.buf.format({ async = true })
       end,
       desc = 'Format File or Range',
-      opts = {},
-      enabled = true,
-    },
-
-    -- SUBSECTION: Trouble
-    -- Plugin Configuration File: ../plugins/development/trouble.lua
-    {
-      modes = 'n',
-      lhs = '<leader>xx',
-      rhs = '<cmd>Trouble diagnostics toggle<cr>',
-      desc = 'Diagnostics (Trouble)',
-      opts = {},
-      enabled = true,
-    },
-    {
-      modes = 'n',
-      lhs = '<leader>xX',
-      rhs = '<cmd>Trouble diagnostics toggle filter.buf=0<cr>',
-      desc = 'Buffer Diagnostics (Trouble)',
-      opts = {},
-      enabled = true,
-    },
-    {
-      modes = 'n',
-      lhs = '<leader>cs',
-      rhs = '<cmd>Trouble symbols toggle focus=false<cr>',
-      desc = 'Symbols (Trouble)',
-      opts = {},
-      enabled = true,
-    },
-    {
-      modes = 'n',
-      lhs = '<leader>cl',
-      rhs = '<cmd>Trouble lsp toggle focus=false win.position=right<cr>',
-      desc = 'LSP Definitions / references / ... (Trouble)',
-      opts = {},
-      enabled = true,
-    },
-    {
-      modes = 'n',
-      lhs = '<leader>xL',
-      rhs = '<cmd>Trouble loclist toggle<cr>',
-      desc = 'Location List (Trouble)',
-      opts = {},
-      enabled = true,
-    },
-    {
-      modes = 'n',
-      lhs = '<leader>xQ',
-      rhs = '<cmd>Trouble qflist toggle<cr>',
-      desc = 'Quickfix List (Trouble)',
       opts = {},
       enabled = true,
     },

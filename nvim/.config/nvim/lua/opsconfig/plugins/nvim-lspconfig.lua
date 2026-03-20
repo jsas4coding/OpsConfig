@@ -48,6 +48,11 @@ return {
       capabilities = capabilities,
     })
 
+    lspconfig.yamlls.setup({
+      flags = flags,
+      capabilities = capabilities,
+    })
+
     local diagnostic_config = {
       virtual_text = true,
       signs = true,
@@ -127,7 +132,7 @@ return {
             })
 
             if winnr then
-              vim.api.nvim_win_set_option(winnr, 'winhighlight', 'Normal:NormalFloat,FloatBorder:FloatBorder')
+              vim.wo[winnr].winhighlight = 'Normal:NormalFloat,FloatBorder:FloatBorder'
             end
 
             return bufnr, winnr
