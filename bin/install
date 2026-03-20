@@ -13,7 +13,7 @@ IFS=$'\n\t'
 # COMMON LIBRARY (standalone - no external dependencies)
 # =============================================================================
 
-readonly OPSCONFIG_VERSION="3.0.5"
+readonly OPSCONFIG_VERSION="3.0.6"
 
 # Colors
 readonly RED="\e[31m"
@@ -468,8 +468,12 @@ install_python_env() {
   # shellcheck disable=SC1091
   source "${NPYTHON_DIR}/bin/activate"
 
+  # Split space-separated packages into array (IFS doesn't include space)
+  local -a pkgs
+  read -ra pkgs <<<"${PYTHON_PACKAGES}"
+
   # Validate package names before installing
-  for pkg in ${PYTHON_PACKAGES}; do
+  for pkg in "${pkgs[@]}"; do
     if [[ ! ${pkg} =~ ^[a-zA-Z0-9_.-]+$ ]]; then
       msg error "Invalid Python package name: ${pkg}"
       deactivate
@@ -480,8 +484,7 @@ install_python_env() {
   msg info "Installing Python packages: ${PYTHON_PACKAGES}"
   python -m ensurepip --upgrade
   pip install --upgrade pip
-  # shellcheck disable=SC2086
-  pip install ${PYTHON_PACKAGES}
+  pip install "${pkgs[@]}"
   deactivate
 
   msg success "Python environment set up at ${NPYTHON_DIR}"
@@ -562,7 +565,11 @@ install_fonts() {
   local font_dir="${HOME}/.local/share/fonts"
   mkdir -p "${font_dir}"
 
-  for font_name in ${FONTS}; do
+  # Split space-separated fonts into array (IFS doesn't include space)
+  local -a font_list
+  read -ra font_list <<<"${FONTS}"
+
+  for font_name in "${font_list[@]}"; do
     if [[ ! ${font_name} =~ ^[a-zA-Z0-9_-]+$ ]]; then
       msg error "Invalid font name: ${font_name}"
       continue
