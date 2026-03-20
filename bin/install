@@ -6,14 +6,14 @@
 # Repository: https://github.com/jsas4coding/OpsConfig
 # =============================================================================
 
-set -euo pipefail
+set -Eeuo pipefail
 IFS=$'\n\t'
 
 # =============================================================================
 # COMMON LIBRARY (standalone - no external dependencies)
 # =============================================================================
 
-readonly OPSCONFIG_VERSION="3.0.4"
+readonly OPSCONFIG_VERSION="3.0.5"
 
 # Colors
 readonly RED="\e[31m"
@@ -636,14 +636,18 @@ cleanup_legacy() {
   )
 
   for file in "${files[@]}"; do
-    [[ -L ${file} || -e ${file} ]] && rm -rf "${file}"
+    if [[ -L ${file} || -e ${file} ]]; then
+      rm -rf "${file}"
+    fi
   done
 }
 
 setup_repository() {
   msg git "Configuring OpsConfig repository..."
 
-  [[ -d ${OPSCONFIG_REPO} ]] && rm -rf "${OPSCONFIG_REPO}"
+  if [[ -d ${OPSCONFIG_REPO} ]]; then
+    rm -rf "${OPSCONFIG_REPO}"
+  fi
 
   if ! git clone https://github.com/jsas4coding/OpsConfig.git "${OPSCONFIG_REPO}"; then
     msg error "Failed to clone OpsConfig repository."
