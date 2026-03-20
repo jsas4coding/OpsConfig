@@ -8,6 +8,8 @@
 
 set -euo pipefail
 
+readonly OPSCONFIG_VERSION="3.0.0"
+
 # =============================================================================
 # COLORS AND ICONS
 # =============================================================================
@@ -252,10 +254,22 @@ install_neovim() {
 
   msg info "Installing Neovim globally..."
 
-  local nvim_url="https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz"
+  local arch
+  arch="$(uname -m)"
+  local nvim_arch
+  case "${arch}" in
+    x86_64) nvim_arch="x86_64" ;;
+    aarch64) nvim_arch="arm64" ;;
+    *)
+      msg error "Unsupported architecture: ${arch}"
+      return 1
+      ;;
+  esac
+
+  local nvim_url="https://github.com/neovim/neovim/releases/latest/download/nvim-linux-${nvim_arch}.tar.gz"
   local nvim_dest="/opt/nvim"
-  local nvim_tar="nvim-linux-x86_64.tar.gz"
-  local nvim_tmp="/opt/nvim-linux-x86_64"
+  local nvim_tar="nvim-linux-${nvim_arch}.tar.gz"
+  local nvim_tmp="/opt/nvim-linux-${nvim_arch}"
   local env_file="/etc/environment"
   local nvim_path="/opt/nvim/bin"
   local scripts_dir="/var/scripts"
@@ -357,7 +371,16 @@ install_node() {
   else
     msg download "Installing fnm (Fast Node Manager)..."
     mkdir -p "${fnm_dir}"
-    local fnm_archive="fnm-linux.zip"
+    local fnm_arch
+    case "$(uname -m)" in
+      x86_64) fnm_arch="linux" ;;
+      aarch64) fnm_arch="arm64" ;;
+      *)
+        msg error "Unsupported architecture for fnm: $(uname -m)"
+        return 1
+        ;;
+    esac
+    local fnm_archive="fnm-${fnm_arch}.zip"
     curl -fsSL "https://github.com/Schniz/fnm/releases/latest/download/${fnm_archive}" -o "/tmp/${fnm_archive}"
     unzip -o "/tmp/${fnm_archive}" -d "${fnm_dir}"
     chmod +x "${fnm_dir}/fnm"
@@ -506,6 +529,20 @@ main() {
     case "$1" in
       --force) force_python=true ;;
       --no-wizard) skip_wizard=true ;;
+      --version|-V)
+        echo "OpsConfig v${OPSCONFIG_VERSION}"
+        exit 0
+        ;;
+      -h|--help)
+        echo "Usage: install [OPTIONS]"
+        echo ""
+        echo "Options:"
+        echo "  --force        Force Python environment rebuild"
+        echo "  --no-wizard    Skip configuration wizard"
+        echo "  --version, -V  Show version"
+        echo "  -h, --help     Show this help"
+        exit 0
+        ;;
       *) msg warning "Unknown option: $1" ;;
     esac
     shift

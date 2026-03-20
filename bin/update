@@ -8,6 +8,8 @@
 
 set -euo pipefail
 
+readonly OPSCONFIG_VERSION="3.0.0"
+
 # =============================================================================
 # COLORS AND ICONS
 # =============================================================================
@@ -325,12 +327,17 @@ main() {
     case "$1" in
       --no-cleanup) skip_cleanup=true ;;
       --cleanup-only) only_cleanup=true ;;
+      --version|-V)
+        echo "OpsConfig v${OPSCONFIG_VERSION}"
+        exit 0
+        ;;
       -h|--help)
         echo "Usage: update [OPTIONS]"
         echo ""
         echo "Options:"
         echo "  --no-cleanup     Skip server cleanup"
         echo "  --cleanup-only   Only run server cleanup"
+        echo "  --version, -V    Show version"
         echo "  -h, --help       Show this help"
         exit 0
         ;;

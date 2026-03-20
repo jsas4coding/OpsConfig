@@ -13,6 +13,8 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+readonly OPSCONFIG_VERSION="3.0.0"
+
 # =============================================================================
 # COLORS AND ICONS
 # =============================================================================
@@ -213,7 +215,16 @@ install_fnm() {
   fi
 
   mkdir -p "${FNM_DIR}"
-  local fnm_archive="fnm-linux.zip"
+  local fnm_arch
+  case "$(uname -m)" in
+    x86_64) fnm_arch="linux" ;;
+    aarch64) fnm_arch="arm64" ;;
+    *)
+      msg error "Unsupported architecture for fnm: $(uname -m)"
+      return 1
+      ;;
+  esac
+  local fnm_archive="fnm-${fnm_arch}.zip"
   curl -fsSL "https://github.com/Schniz/fnm/releases/latest/download/${fnm_archive}" -o "/tmp/${fnm_archive}"
   unzip -o "/tmp/${fnm_archive}" -d "${FNM_DIR}"
   chmod +x "${FNM_DIR}/fnm"
