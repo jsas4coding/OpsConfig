@@ -13,7 +13,7 @@ IFS=$'\n\t'
 # COMMON LIBRARY (standalone - no external dependencies)
 # =============================================================================
 
-readonly OPSCONFIG_VERSION="3.0.6"
+readonly OPSCONFIG_VERSION="3.0.7"
 
 # Colors
 readonly RED="\e[31m"
@@ -470,7 +470,7 @@ install_python_env() {
 
   # Split space-separated packages into array (IFS doesn't include space)
   local -a pkgs
-  read -ra pkgs <<<"${PYTHON_PACKAGES}"
+  IFS=' ' read -ra pkgs <<<"${PYTHON_PACKAGES}"
 
   # Validate package names before installing
   for pkg in "${pkgs[@]}"; do
@@ -567,7 +567,7 @@ install_fonts() {
 
   # Split space-separated fonts into array (IFS doesn't include space)
   local -a font_list
-  read -ra font_list <<<"${FONTS}"
+  IFS=' ' read -ra font_list <<<"${FONTS}"
 
   for font_name in "${font_list[@]}"; do
     if [[ ! ${font_name} =~ ^[a-zA-Z0-9_-]+$ ]]; then
@@ -742,7 +742,14 @@ main() {
   echo ""
   msg success "=== OpsConfig Installation Complete ==="
   msg info "Configuration saved at: ${CONFIG_FILE}"
-  msg info "Reload your shell: source ~/.bashrc"
+
+  # Load bash configuration
+  if [[ -f "${HOME}/.bashrc" ]]; then
+    # shellcheck disable=SC1091
+    source "${HOME}/.bashrc"
+    msg success "Bash configuration loaded."
+  fi
+
   echo ""
 }
 
