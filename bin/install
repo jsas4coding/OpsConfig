@@ -9,8 +9,88 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-# shellcheck source=lib/common.sh
-source "$(dirname "$0")/lib/common.sh"
+# =============================================================================
+# COMMON LIBRARY (standalone - no external dependencies)
+# =============================================================================
+
+readonly OPSCONFIG_VERSION="3.0.1"
+
+# Colors
+readonly RED="\e[31m"
+readonly GREEN="\e[32m"
+readonly YELLOW="\e[33m"
+readonly CYAN="\e[36m"
+readonly WHITE="\e[97m"
+readonly MAGENTA="\e[35m"
+readonly NC="\e[0m"
+readonly RESET="${NC}"
+
+# Icons
+readonly SUCCESS_ICON="[OK] "
+readonly ERROR_ICON="[ERR] "
+readonly WARNING_ICON="[WARN] "
+readonly INFO_ICON="[INFO] "
+
+# Logging
+msg() {
+  local type="$1"
+  local text="$2"
+  local icon=""
+  local color=""
+
+  case "$type" in
+    success)
+      icon="$SUCCESS_ICON"
+      color="$GREEN"
+      ;;
+    error)
+      icon="$ERROR_ICON"
+      color="$RED"
+      ;;
+    warning)
+      icon="$WARNING_ICON"
+      color="$YELLOW"
+      ;;
+    info)
+      icon="$INFO_ICON"
+      color="$CYAN"
+      ;;
+    download)
+      icon="[DL] "
+      color="$WHITE"
+      ;;
+    delete)
+      icon="[DEL] "
+      color="$RED"
+      ;;
+    git)
+      icon="[GIT] "
+      color="$MAGENTA"
+      ;;
+    config)
+      icon="[CFG] "
+      color="$CYAN"
+      ;;
+    clean)
+      icon="[CLN] "
+      color="$MAGENTA"
+      ;;
+    php)
+      icon="[PHP] "
+      color="$MAGENTA"
+      ;;
+    migrate)
+      icon="[MIG] "
+      color="$MAGENTA"
+      ;;
+    *)
+      icon=" "
+      color="$WHITE"
+      ;;
+  esac
+
+  echo -e "${color}${icon}${text}${NC}"
+}
 
 # =============================================================================
 # CLEANUP
@@ -52,7 +132,7 @@ DEFAULT_PYTHON_PACKAGES="neovim tasklib pynvim requests black"
 # =============================================================================
 
 load_config() {
-  if [[ -f "${CONFIG_FILE}" ]]; then
+  if [[ -f ${CONFIG_FILE} ]]; then
     # Validate config contains only safe KEY="value" lines before sourcing
     if grep -qvE '^\s*#|^\s*$|^[A-Z_]+="[^"]*"$' "${CONFIG_FILE}"; then
       msg warning "Config file contains unexpected content, skipping load"
@@ -67,7 +147,7 @@ load_config() {
 }
 
 save_config() {
-  cat > "${CONFIG_FILE}" << EOF
+  cat >"${CONFIG_FILE}" <<EOF
 # =============================================================================
 # OpsConfig Configuration
 # =============================================================================
@@ -104,12 +184,12 @@ EOF
   msg success "Configuration saved to ${CONFIG_FILE}"
 
   # Maintain backwards compatibility with .php file
-  if [[ -n "${PHP_VERSION}" ]]; then
-    echo "${PHP_VERSION}" > "${CONFIG_DIR}/.php"
+  if [[ -n ${PHP_VERSION} ]]; then
+    echo "${PHP_VERSION}" >"${CONFIG_DIR}/.php"
   fi
 
   # Maintain backwards compatibility with .bash_env_local
-  echo "SERVER_NAME=\"${SERVER_NAME}\"" > "${CONFIG_DIR}/.bash_env_local"
+  echo "SERVER_NAME=\"${SERVER_NAME}\"" >"${CONFIG_DIR}/.bash_env_local"
 }
 
 ask_config() {
@@ -118,7 +198,7 @@ ask_config() {
   local default="$3"
   local current_value="${!var_name:-}"
 
-  if [[ -n "${current_value}" ]]; then
+  if [[ -n ${current_value} ]]; then
     default="${current_value}"
   fi
 
@@ -140,7 +220,7 @@ ask_yes_no() {
   local default="$3"
   local current_value="${!var_name:-}"
 
-  if [[ -n "${current_value}" ]]; then
+  if [[ -n ${current_value} ]]; then
     default="${current_value}"
   fi
 
@@ -153,12 +233,12 @@ ask_yes_no() {
     fi
   else
     local yn_default="Y/n"
-    [[ "${default}" == "false" ]] && yn_default="y/N"
+    [[ ${default} == "false" ]] && yn_default="y/N"
     echo -en "${CYAN}${prompt} [${yn_default}]: ${RESET}"
     read -r answer
     case "${answer,,}" in
-      y|yes) result="true" ;;
-      n|no) result="false" ;;
+      y | yes) result="true" ;;
+      n | no) result="false" ;;
       *) result="${default}" ;;
     esac
   fi
@@ -185,14 +265,14 @@ run_config_wizard() {
   ask_config "NODE_VERSION" "Enter Node.js version to install:" "${NODE_VERSION}"
   ask_yes_no "INSTALL_FONTS" "Install Nerd Fonts (JetBrains Mono, Fira Code)?" "${INSTALL_FONTS}"
 
-  if [[ "${INSTALL_FONTS}" == "true" ]]; then
+  if [[ ${INSTALL_FONTS} == "true" ]]; then
     ask_config "FONTS" "Fonts to install (space-separated):" "${FONTS}"
   fi
 
   ask_yes_no "INSTALL_FZF" "Install fzf fuzzy finder?" "${INSTALL_FZF}"
   ask_yes_no "INSTALL_PYTHON_ENV" "Install Python environment for Neovim?" "${INSTALL_PYTHON_ENV}"
 
-  if [[ "${INSTALL_PYTHON_ENV}" == "true" ]]; then
+  if [[ ${INSTALL_PYTHON_ENV} == "true" ]]; then
     ask_config "PYTHON_PACKAGES" "Python packages to install:" "${PYTHON_PACKAGES}"
   fi
 
@@ -295,7 +375,7 @@ install_neovim() {
 }
 
 install_fzf() {
-  if [[ "${INSTALL_FZF}" != "true" ]]; then
+  if [[ ${INSTALL_FZF} != "true" ]]; then
     msg info "Skipping fzf installation (disabled in config)."
     return 0
   fi
@@ -307,12 +387,12 @@ install_fzf() {
   else
     msg info "Updating fzf..."
     cd ~/.fzf && git pull && ./install --all
-    cd - > /dev/null
+    cd - >/dev/null
   fi
 }
 
 install_python_env() {
-  if [[ "${INSTALL_PYTHON_ENV}" != "true" ]]; then
+  if [[ ${INSTALL_PYTHON_ENV} != "true" ]]; then
     msg info "Skipping Python environment (disabled in config)."
     return 0
   fi
@@ -320,9 +400,9 @@ install_python_env() {
   msg info "Checking Neovim Python environment..."
 
   local force_setup=false
-  [[ "${1:-}" == "--force" ]] && force_setup=true
+  [[ ${1:-} == "--force" ]] && force_setup=true
 
-  if [[ -d "${NPYTHON_DIR}" && "${force_setup}" != true ]]; then
+  if [[ -d ${NPYTHON_DIR} && ${force_setup} != true ]]; then
     msg info "Python environment already exists at ${NPYTHON_DIR}, skipping setup."
     return 0
   fi
@@ -341,7 +421,7 @@ install_python_env() {
 
   # Validate package names before installing
   for pkg in ${PYTHON_PACKAGES}; do
-    if [[ ! "${pkg}" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
+    if [[ ! ${pkg} =~ ^[a-zA-Z0-9_.-]+$ ]]; then
       msg error "Invalid Python package name: ${pkg}"
       deactivate
       return 1
@@ -425,7 +505,7 @@ install_node() {
 }
 
 install_fonts() {
-  if [[ "${INSTALL_FONTS}" != "true" ]]; then
+  if [[ ${INSTALL_FONTS} != "true" ]]; then
     msg info "Skipping font installation (disabled in config)."
     return 0
   fi
@@ -434,7 +514,7 @@ install_fonts() {
   mkdir -p "${font_dir}"
 
   for font_name in ${FONTS}; do
-    if [[ ! "${font_name}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    if [[ ! ${font_name} =~ ^[a-zA-Z0-9_-]+$ ]]; then
       msg error "Invalid font name: ${font_name}"
       continue
     fi
@@ -444,7 +524,7 @@ install_fonts() {
     local hash_file="${CONFIG_DIR}/${font_name}.hash"
 
     local old_hash=""
-    [[ -f "${hash_file}" ]] && old_hash=$(cat "${hash_file}")
+    [[ -f ${hash_file} ]] && old_hash=$(cat "${hash_file}")
 
     msg download "Downloading ${font_name} Nerd Font..."
 
@@ -457,7 +537,7 @@ install_fonts() {
     local new_hash
     new_hash=$(sha256sum "${temp_dir}/${font_name}.zip" | awk '{print $1}')
 
-    if [[ "${old_hash}" == "${new_hash}" ]]; then
+    if [[ ${old_hash} == "${new_hash}" ]]; then
       msg info "No updates found for ${font_name}. Skipping."
       rm -rf "${temp_dir}"
       continue
@@ -467,7 +547,7 @@ install_fonts() {
     unzip -q "${temp_dir}/${font_name}.zip" -d "${temp_dir}"
     mv -f "${temp_dir}"/*.ttf "${font_dir}/" 2>/dev/null || true
 
-    echo "${new_hash}" > "${hash_file}"
+    echo "${new_hash}" >"${hash_file}"
     rm -rf "${temp_dir}"
 
     msg success "${font_name} Nerd Font installed!"
@@ -501,14 +581,14 @@ cleanup_legacy() {
   )
 
   for file in "${files[@]}"; do
-    [[ -L "${file}" || -e "${file}" ]] && rm -rf "${file}"
+    [[ -L ${file} || -e ${file} ]] && rm -rf "${file}"
   done
 }
 
 setup_repository() {
   msg git "Configuring OpsConfig repository..."
 
-  [[ -d "${OPSCONFIG_REPO}" ]] && rm -rf "${OPSCONFIG_REPO}"
+  [[ -d ${OPSCONFIG_REPO} ]] && rm -rf "${OPSCONFIG_REPO}"
 
   git clone https://github.com/jsas4coding/OpsConfig.git "${OPSCONFIG_REPO}"
 
@@ -531,11 +611,11 @@ main() {
     case "$1" in
       --force) force_python=true ;;
       --no-wizard) skip_wizard=true ;;
-      --version|-V)
+      --version | -V)
         echo "OpsConfig v${OPSCONFIG_VERSION}"
         exit 0
         ;;
-      -h|--help)
+      -h | --help)
         echo "Usage: install [OPTIONS]"
         echo ""
         echo "Options:"
@@ -555,9 +635,9 @@ main() {
   echo ""
 
   # Load existing config or run wizard
-  if load_config && [[ "${skip_wizard}" == "true" ]]; then
+  if load_config && [[ ${skip_wizard} == "true" ]]; then
     msg info "Using existing configuration."
-  elif ! load_config || [[ "${skip_wizard}" != "true" ]]; then
+  elif ! load_config || [[ ${skip_wizard} != "true" ]]; then
     run_config_wizard
   fi
 
@@ -569,7 +649,7 @@ main() {
   install_fzf
   install_node
 
-  if [[ "${force_python}" == "true" ]]; then
+  if [[ ${force_python} == "true" ]]; then
     install_python_env --force
   else
     install_python_env

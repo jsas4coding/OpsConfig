@@ -6,7 +6,7 @@
 # Source this file: source "$(dirname "$0")/lib/common.sh"
 # =============================================================================
 
-readonly OPSCONFIG_VERSION="3.0.0"
+readonly OPSCONFIG_VERSION="3.0.1"
 
 # =============================================================================
 # COLORS
@@ -19,6 +19,7 @@ readonly CYAN="\e[36m"
 readonly WHITE="\e[97m"
 readonly MAGENTA="\e[35m"
 readonly NC="\e[0m"
+readonly RESET="${NC}"
 
 # =============================================================================
 # ICONS
@@ -40,18 +41,54 @@ msg() {
   local color=""
 
   case "$type" in
-    success) icon="$SUCCESS_ICON"; color="$GREEN" ;;
-    error) icon="$ERROR_ICON"; color="$RED" ;;
-    warning) icon="$WARNING_ICON"; color="$YELLOW" ;;
-    info) icon="$INFO_ICON"; color="$CYAN" ;;
-    download) icon="[DL] "; color="$WHITE" ;;
-    delete) icon="[DEL] "; color="$RED" ;;
-    git) icon="[GIT] "; color="$MAGENTA" ;;
-    config) icon="[CFG] "; color="$CYAN" ;;
-    clean) icon="[CLN] "; color="$MAGENTA" ;;
-    php) icon="[PHP] "; color="$MAGENTA" ;;
-    migrate) icon="[MIG] "; color="$MAGENTA" ;;
-    *) icon=" "; color="$WHITE" ;;
+    success)
+      icon="$SUCCESS_ICON"
+      color="$GREEN"
+      ;;
+    error)
+      icon="$ERROR_ICON"
+      color="$RED"
+      ;;
+    warning)
+      icon="$WARNING_ICON"
+      color="$YELLOW"
+      ;;
+    info)
+      icon="$INFO_ICON"
+      color="$CYAN"
+      ;;
+    download)
+      icon="[DL] "
+      color="$WHITE"
+      ;;
+    delete)
+      icon="[DEL] "
+      color="$RED"
+      ;;
+    git)
+      icon="[GIT] "
+      color="$MAGENTA"
+      ;;
+    config)
+      icon="[CFG] "
+      color="$CYAN"
+      ;;
+    clean)
+      icon="[CLN] "
+      color="$MAGENTA"
+      ;;
+    php)
+      icon="[PHP] "
+      color="$MAGENTA"
+      ;;
+    migrate)
+      icon="[MIG] "
+      color="$MAGENTA"
+      ;;
+    *)
+      icon=" "
+      color="$WHITE"
+      ;;
   esac
 
   echo -e "${color}${icon}${text}${NC}"
