@@ -98,6 +98,17 @@ msg() {
 
 CLEANUP_FILES=()
 cleanup() { rm -f "${CLEANUP_FILES[@]}"; }
+
+on_error() {
+  local exit_code=$?
+  local line_no=$1
+  msg error "Installation failed at line ${line_no} (exit code: ${exit_code})"
+  msg info "Re-run the installer to retry, or check the error above."
+  cleanup
+  exit "${exit_code}"
+}
+
+trap 'on_error $LINENO' ERR
 trap cleanup EXIT INT TERM HUP
 
 # =============================================================================
@@ -628,12 +639,25 @@ setup_repository() {
 
   [[ -d ${OPSCONFIG_REPO} ]] && rm -rf "${OPSCONFIG_REPO}"
 
-  git clone https://github.com/jsas4coding/OpsConfig.git "${OPSCONFIG_REPO}"
+  if ! git clone https://github.com/jsas4coding/OpsConfig.git "${OPSCONFIG_REPO}"; then
+    msg error "Failed to clone OpsConfig repository."
+    msg info "Check your internet connection and try again."
+    return 1
+  fi
 
   msg git "Applying stow to OpsConfig repository..."
 
-  stow --dir="${OPSCONFIG_REPO}" --target="${HOME}" bash
-  stow --dir="${OPSCONFIG_REPO}" --target="${HOME}" nvim
+  if ! stow --dir="${OPSCONFIG_REPO}" --target="${HOME}" bash; then
+    msg error "Failed to apply bash configuration via stow."
+    return 1
+  fi
+
+  if ! stow --dir="${OPSCONFIG_REPO}" --target="${HOME}" nvim; then
+    msg error "Failed to apply nvim configuration via stow."
+    return 1
+  fi
+
+  msg success "Repository configured and dotfiles applied."
 }
 
 # =============================================================================
