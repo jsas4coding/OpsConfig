@@ -192,6 +192,10 @@ EOF
   echo "SERVER_NAME=\"${SERVER_NAME}\"" >"${CONFIG_DIR}/.bash_env_local"
 }
 
+_has_tty() {
+  [[ -t 0 ]] || [[ -e /dev/tty ]]
+}
+
 ask_config() {
   local var_name="$1"
   local prompt="$2"
@@ -202,12 +206,18 @@ ask_config() {
     default="${current_value}"
   fi
 
+  # No TTY available (pipe, CI, container) — use default silently
+  if ! _has_tty; then
+    printf -v "${var_name}" '%s' "${default}"
+    return 0
+  fi
+
   local result
   if command -v whiptail &>/dev/null; then
     result=$(whiptail --inputbox "${prompt}" 8 60 "${default}" --title "OpsConfig Setup" 3>&1 1>&2 2>&3) || result="${default}"
   else
     echo -en "${CYAN}${prompt} [${default}]: ${RESET}"
-    read -r result
+    read -r result </dev/tty
     result="${result:-${default}}"
   fi
 
@@ -224,6 +234,12 @@ ask_yes_no() {
     default="${current_value}"
   fi
 
+  # No TTY available (pipe, CI, container) — use default silently
+  if ! _has_tty; then
+    printf -v "${var_name}" '%s' "${default}"
+    return 0
+  fi
+
   local result
   if command -v whiptail &>/dev/null; then
     if whiptail --yesno "${prompt}" 8 60 --title "OpsConfig Setup" 3>&1 1>&2 2>&3; then
@@ -235,7 +251,7 @@ ask_yes_no() {
     local yn_default="Y/n"
     [[ ${default} == "false" ]] && yn_default="y/N"
     echo -en "${CYAN}${prompt} [${yn_default}]: ${RESET}"
-    read -r answer
+    read -r answer </dev/tty
     case "${answer,,}" in
       y | yes) result="true" ;;
       n | no) result="false" ;;
@@ -261,7 +277,12 @@ run_config_wizard() {
   PYTHON_PACKAGES="${PYTHON_PACKAGES:-${DEFAULT_PYTHON_PACKAGES}}"
 
   ask_config "SERVER_NAME" "Enter the server name (displayed in prompt):" "${SERVER_NAME}"
-  ask_config "PHP_VERSION" "Enter PHP CLI version (leave empty to skip):" "${PHP_VERSION}"
+
+  # PHP configuration is only useful when running as root
+  if [[ $EUID -eq 0 ]]; then
+    ask_config "PHP_VERSION" "Enter PHP CLI version (leave empty to skip):" "${PHP_VERSION}"
+  fi
+
   ask_config "NODE_VERSION" "Enter Node.js version to install:" "${NODE_VERSION}"
   ask_yes_no "INSTALL_FONTS" "Install Nerd Fonts (JetBrains Mono, Fira Code)?" "${INSTALL_FONTS}"
 
@@ -283,6 +304,23 @@ run_config_wizard() {
 # =============================================================================
 # INSTALLATION FUNCTIONS
 # =============================================================================
+
+check_required_commands() {
+  local missing=()
+
+  for cmd in git stow curl; do
+    if ! command -v "${cmd}" &>/dev/null; then
+      missing+=("${cmd}")
+    fi
+  done
+
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    msg error "Missing required commands: ${missing[*]}"
+    msg info "Install them first (as root):"
+    msg info "  sudo apt-get install -y ${missing[*]}"
+    exit 1
+  fi
+}
 
 install_system_packages() {
   if [[ $EUID -ne 0 ]]; then
@@ -641,8 +679,11 @@ main() {
     run_config_wizard
   fi
 
-  # Run installation steps
+  # Install system packages (root only) then verify dependencies
   install_system_packages
+  check_required_commands
+
+  # Safe to proceed: cleanup old configs and setup repository
   cleanup_legacy
   setup_repository
   install_neovim
