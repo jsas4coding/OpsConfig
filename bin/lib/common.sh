@@ -6,7 +6,7 @@
 # Source this file: source "$(dirname "$0")/lib/common.sh"
 # =============================================================================
 
-readonly OPSCONFIG_VERSION="3.0.3"
+readonly OPSCONFIG_VERSION="3.0.4"
 
 # =============================================================================
 # COLORS
