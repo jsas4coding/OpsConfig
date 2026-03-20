@@ -43,7 +43,7 @@ Changes that are merged but not yet released.
 
 ## Fixed
 
-- Removed 5 non-existent plugin entries from init.lua (telescope-*, nvim-cmp)
+- Removed 5 non-existent plugin entries from init.lua (telescope-\*, nvim-cmp)
 - Removed SessionRestore button from alpha dashboard (no session plugin)
 - Removed 6 Trouble keymaps (plugin not installed)
 - Added missing `return` to conform.nvim `format_on_save` callback

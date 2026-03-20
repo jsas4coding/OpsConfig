@@ -7,7 +7,6 @@ return {
   enabled = true,
 
   dependencies = {
-    { 'neovim/nvim-lspconfig', enabled = true },
     { 'williamboman/mason-lspconfig.nvim', enabled = true },
     { 'nvimtools/none-ls.nvim', enabled = true },
     { 'jay-babu/mason-null-ls.nvim', enabled = true },

@@ -7,8 +7,10 @@
 # =============================================================================
 
 set -euo pipefail
+IFS=$'\n\t'
 
-readonly OPSCONFIG_VERSION="3.0.0"
+# shellcheck source=lib/common.sh
+source "$(dirname "$0")/lib/common.sh"
 
 # =============================================================================
 # CLEANUP
@@ -17,42 +19,6 @@ readonly OPSCONFIG_VERSION="3.0.0"
 CLEANUP_FILES=()
 cleanup() { rm -f "${CLEANUP_FILES[@]}"; }
 trap cleanup EXIT INT TERM HUP
-
-# =============================================================================
-# COLORS AND ICONS
-# =============================================================================
-
-RED="\e[31m"
-GREEN="\e[32m"
-YELLOW="\e[33m"
-CYAN="\e[36m"
-WHITE="\e[97m"
-MAGENTA="\e[35m"
-RESET="\e[0m"
-
-SUCCESS_ICON="[OK] "
-ERROR_ICON="[ERR] "
-WARNING_ICON="[WARN] "
-INFO_ICON="[INFO] "
-CLEAN_ICON="[CLN] "
-
-msg() {
-  local type="$1"
-  local text="$2"
-  local icon=""
-  local color=""
-
-  case "$type" in
-    success) icon="$SUCCESS_ICON"; color="$GREEN" ;;
-    error) icon="$ERROR_ICON"; color="$RED" ;;
-    warning) icon="$WARNING_ICON"; color="$YELLOW" ;;
-    info) icon="$INFO_ICON"; color="$CYAN" ;;
-    clean) icon="$CLEAN_ICON"; color="$MAGENTA" ;;
-    *) icon=" "; color="$WHITE" ;;
-  esac
-
-  echo -e "${color}${icon}${text}${RESET}"
-}
 
 # =============================================================================
 # CONFIGURATION
@@ -318,11 +284,7 @@ cleanup_server() {
 # =============================================================================
 
 reload_bash() {
-  if [[ -f "${HOME}/.bashrc" ]]; then
-    msg info "Reloading bash configuration..."
-    # shellcheck disable=SC1091
-    source "${HOME}/.bashrc"
-  fi
+  msg info "Reload your shell to apply changes: source ~/.bashrc"
 }
 
 # =============================================================================

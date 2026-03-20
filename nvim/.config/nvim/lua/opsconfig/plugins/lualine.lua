@@ -15,7 +15,7 @@ return {
     local setup = {}
     local plugins_updates_color = '#fab387'
 
-    local noice = require('noice')
+    local noice_ok, noice = pcall(require, 'noice')
 
     setup.options = {
       theme = 'catppuccin',
@@ -51,11 +51,11 @@ return {
         },
       },
       lualine_x = {
-        {
+        noice_ok and {
           noice.api.statusline.mode.get,
           cond = noice.api.statusline.mode.has,
           color = { fg = '#ff9e64' },
-        },
+        } or nil,
         {
           lazy_status.updates,
           cond = lazy_status.has_updates,

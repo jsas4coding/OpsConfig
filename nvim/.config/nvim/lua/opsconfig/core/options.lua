@@ -60,7 +60,6 @@ vim.opt.updatetime = 1000
 
 -- Decrease mapped sequence wait time
 vim.o.timeout = true
-vim.opt.timeoutlen = 1000
 vim.o.ttimeoutlen = 10
 
 -- Preview substitutions live, as you type!
@@ -107,4 +106,5 @@ vim.o.foldcolumn = '1'
 vim.o.foldlevel = 99
 vim.o.foldlevelstart = 99
 vim.o.foldenable = true
-vim.o.foldmethod = 'marker'
+vim.o.foldmethod = 'expr'
+vim.o.foldexpr = 'v:lua.vim.treesitter.foldexpr()'

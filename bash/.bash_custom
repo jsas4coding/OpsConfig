@@ -130,12 +130,10 @@ HISTIGNORE+=':*mysql*-p*:*psql*-W*:*mongo*--password*:curl*-u *:wget*--password*
 HISTIGNORE+=':*AWS_*=*:*GCP_*=*:*AZURE_*=*:ssh-add *:*id_rsa*:*id_ed25519*'
 
 # Shell options for better experience
-shopt -s histappend   # Append to history instead of overwriting
 shopt -s cdspell      # Auto-correct minor cd typos
 shopt -s dirspell     # Auto-correct directory spelling in completion
 shopt -s autocd       # Change to directory without typing cd
 shopt -s globstar     # Enable ** for recursive globbing
-shopt -s checkwinsize # Update LINES and COLUMNS after each command
 shopt -s cmdhist      # Save multi-line commands as single history entry
 shopt -s nocaseglob   # Case-insensitive globbing
 
@@ -221,7 +219,7 @@ function remote-copy() {
   local is_tmux=false
   local is_wezterm=false
 
-  [[ -n ${SSH_CONNECTION:-} ]] || [[ -n ${SSH_CLIENT:-} ]] || [[ -n ${SSH_TTY:-} ]] && is_ssh=true
+  { [[ -n ${SSH_CONNECTION:-} ]] || [[ -n ${SSH_CLIENT:-} ]] || [[ -n ${SSH_TTY:-} ]]; } && is_ssh=true
   [[ -n ${TMUX:-} ]] && is_tmux=true
   [[ -n ${WEZTERM_PANE:-} ]] && is_wezterm=true
 

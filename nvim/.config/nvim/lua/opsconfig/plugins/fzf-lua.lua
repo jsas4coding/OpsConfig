@@ -139,7 +139,10 @@ return {
     })
 
     -- Keybindings with which-key integration
-    local wk = require('which-key')
+    local ok, wk = pcall(require, 'which-key')
+    if not ok then
+      return
+    end
 
     wk.add({
       { '<leader>f', group = 'Find' },

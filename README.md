@@ -101,16 +101,16 @@ curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/bin/inst
 
 The installer creates a configuration at `~/.config/opsconfig/config`:
 
-| Setting              | Description                   | Default                      |
-| -------------------- | ----------------------------- | ---------------------------- |
-| `SERVER_NAME`        | Displayed in shell prompt     | hostname                     |
-| `PHP_VERSION`        | PHP CLI version               | (empty)                      |
-| `NODE_VERSION`       | Node.js version for fnm       | 22                           |
-| `INSTALL_FONTS`      | Install Nerd Fonts            | true                         |
-| `FONTS`              | Fonts to install              | JetBrainsMono FiraCode       |
-| `INSTALL_FZF`        | Install fzf fuzzy finder      | true                         |
-| `INSTALL_PYTHON_ENV` | Python environment for Neovim | true                         |
-| `PYTHON_PACKAGES`    | Python packages to install    | neovim pynvim black requests |
+| Setting              | Description                   | Default                              |
+| -------------------- | ----------------------------- | ------------------------------------ |
+| `SERVER_NAME`        | Displayed in shell prompt     | hostname                             |
+| `PHP_VERSION`        | PHP CLI version               | (empty)                              |
+| `NODE_VERSION`       | Node.js version for fnm       | 22                                   |
+| `INSTALL_FONTS`      | Install Nerd Fonts            | true                                 |
+| `FONTS`              | Fonts to install              | JetBrainsMono FiraCode               |
+| `INSTALL_FZF`        | Install fzf fuzzy finder      | true                                 |
+| `INSTALL_PYTHON_ENV` | Python environment for Neovim | true                                 |
+| `PYTHON_PACKAGES`    | Python packages to install    | neovim tasklib pynvim requests black |
 
 ### Migration from NVM to fnm
 
@@ -160,7 +160,7 @@ The script installs:
 
 ### Minimum Requirements
 
-- **OS**: Ubuntu 20.04+, Debian 11+, Fedora 36+, Alpine 3.16+
+- **OS**: Ubuntu 20.04+, Debian 11+
 - **RAM**: 512MB (1GB recommended)
 - **Disk**: 500MB free space
 - **Terminal**: Any terminal with UTF-8 support
@@ -208,7 +208,7 @@ opsconfig/
 │       │   │   ├── fzf-lua.lua    # Fuzzy finder
 │       │   │   ├── catppuccin.lua # Color scheme
 │       │   │   ├── nvim-tree.lua  # File explorer
-│       │   │   ├── lspconfig.lua  # LSP configuration
+│       │   │   ├── nvim-lspconfig.lua  # LSP configuration
 │       │   │   └── ...            # Other plugins
 │       │   └── behaviors/         # Terminal integrations
 │       └── lazy.lua               # Plugin manager bootstrap
@@ -346,7 +346,7 @@ Comprehensive system update:
 
 1. Runs `before_install` hook (if exists)
 2. Updates OpsConfig from GitHub
-3. Updates system packages (apt/dnf/yum/apk)
+3. Updates system packages (apt)
 4. Updates Composer (if PHP available)
 5. Runs `after_install` hook (if exists)
 6. Reloads bash configuration
@@ -360,12 +360,6 @@ SSH-aware clipboard function:
 - **Local (X11)**: Uses xclip or xsel
 - **macOS**: Uses pbcopy
 - **Fallback**: OSC52 for any terminal
-
-#### `detect_distro`
-
-Returns current Linux distribution:
-
-- ubuntu, debian, fedora, centos, rhel, rocky, almalinux, alpine, unknown
 
 ### Shell Options
 

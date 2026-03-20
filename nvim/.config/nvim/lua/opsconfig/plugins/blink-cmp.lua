@@ -31,7 +31,7 @@ return {
     -- Appearance settings
     appearance = {
       use_nvim_cmp_as_default = true,
-      nerd_font_variant = 'mono', -- Fallback to text if no nerd font
+      nerd_font_variant = vim.g.have_nerd_font and 'mono' or 'normal',
     },
 
     -- Completion sources

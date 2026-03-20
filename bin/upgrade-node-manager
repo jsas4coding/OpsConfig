@@ -13,7 +13,8 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-readonly OPSCONFIG_VERSION="3.0.0"
+# shellcheck source=lib/common.sh
+source "$(dirname "$0")/lib/common.sh"
 
 # =============================================================================
 # CLEANUP
@@ -22,24 +23,6 @@ readonly OPSCONFIG_VERSION="3.0.0"
 CLEANUP_FILES=()
 cleanup() { rm -f "${CLEANUP_FILES[@]}"; }
 trap cleanup EXIT INT TERM HUP
-
-# =============================================================================
-# COLORS AND ICONS
-# =============================================================================
-
-readonly RED="\e[31m"
-readonly GREEN="\e[32m"
-readonly YELLOW="\e[33m"
-readonly CYAN="\e[36m"
-readonly WHITE="\e[97m"
-readonly MAGENTA="\e[35m"
-readonly RESET="\e[0m"
-
-readonly SUCCESS_ICON="[OK] "
-readonly ERROR_ICON="[ERR] "
-readonly WARNING_ICON="[WARN] "
-readonly INFO_ICON="[INFO] "
-readonly MIGRATE_ICON="[MIG] "
 
 # =============================================================================
 # GLOBALS
@@ -56,28 +39,6 @@ declare -a INSTALLED_VERSIONS=()
 declare -a MAJOR_VERSIONS=()
 declare -a GLOBAL_PACKAGES=()
 DEFAULT_NODE_VERSION=""
-
-# =============================================================================
-# LOGGING FUNCTIONS
-# =============================================================================
-
-msg() {
-  local type="$1"
-  local text="$2"
-  local icon=""
-  local color=""
-
-  case "$type" in
-    success) icon="$SUCCESS_ICON"; color="$GREEN" ;;
-    error) icon="$ERROR_ICON"; color="$RED" ;;
-    warning) icon="$WARNING_ICON"; color="$YELLOW" ;;
-    info) icon="$INFO_ICON"; color="$CYAN" ;;
-    migrate) icon="$MIGRATE_ICON"; color="$MAGENTA" ;;
-    *) icon=" "; color="$WHITE" ;;
-  esac
-
-  echo -e "${color}${icon}${text}${RESET}"
-}
 
 # =============================================================================
 # UTILITY FUNCTIONS

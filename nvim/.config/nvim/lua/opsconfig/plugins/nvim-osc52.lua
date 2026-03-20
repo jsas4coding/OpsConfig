@@ -12,7 +12,7 @@ return {
     -- Enhanced OSC52 configuration for multiple environments
     osc52.setup({
       max_length = 0,           -- Maximum length of selection (0 for no limit)
-      silent = false,           -- Disable message on successful copy
+      silent = false,           -- Show message on successful copy
       trim = false,             -- Don't trim whitespace from copied text
       tmux_passthrough = true,  -- Enable Tmux passthrough support
     })
