@@ -16,6 +16,14 @@ IFS=$'\n\t'
 readonly OPSCONFIG_VERSION="3.0.0"
 
 # =============================================================================
+# CLEANUP
+# =============================================================================
+
+CLEANUP_FILES=()
+cleanup() { rm -f "${CLEANUP_FILES[@]}"; }
+trap cleanup EXIT INT TERM HUP
+
+# =============================================================================
 # COLORS AND ICONS
 # =============================================================================
 
@@ -37,7 +45,7 @@ readonly MIGRATE_ICON="[MIG] "
 # GLOBALS
 # =============================================================================
 
-NVM_DIR="${NVM_DIR:-${HOME}/.nvm}"
+NVM_DIR="${HOME}/.nvm"
 FNM_DIR="${HOME}/.local/share/fnm"
 BACKUP_DIR="${HOME}/.config/opsconfig/nvm-backup"
 GLOBAL_PACKAGES_FILE="${BACKUP_DIR}/global-packages.txt"
@@ -225,10 +233,12 @@ install_fnm() {
       ;;
   esac
   local fnm_archive="fnm-${fnm_arch}.zip"
-  curl -fsSL "https://github.com/Schniz/fnm/releases/latest/download/${fnm_archive}" -o "/tmp/${fnm_archive}"
-  unzip -o "/tmp/${fnm_archive}" -d "${FNM_DIR}"
+  local fnm_tmp
+  fnm_tmp="$(mktemp -d)"
+  curl -fsSL --proto '=https' --tlsv1.2 "https://github.com/Schniz/fnm/releases/latest/download/${fnm_archive}" -o "${fnm_tmp}/${fnm_archive}"
+  unzip -o "${fnm_tmp}/${fnm_archive}" -d "${FNM_DIR}"
   chmod +x "${FNM_DIR}/fnm"
-  rm -f "/tmp/${fnm_archive}"
+  rm -rf "${fnm_tmp}"
 
   # Add to PATH for this session
   export PATH="${FNM_DIR}:${PATH}"

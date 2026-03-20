@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+case $- in
+  *i*) ;;
+  *) return ;;
+esac
+
 if [[ -f "${HOME}/.bash_env" ]]; then
   source "${HOME}/.bash_env"
 fi
@@ -7,11 +12,6 @@ fi
 if [[ -f "${HOME}/.config/opsconfig/.bash_env_local" ]]; then
   source "${HOME}/.config/opsconfig/.bash_env_local"
 fi
-
-case $- in
-  *i*) ;;
-  *) return ;;
-esac
 
 HISTCONTROL=ignoreboth
 

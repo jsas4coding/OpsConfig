@@ -458,6 +458,44 @@ create_fpm_pool() {
 
   msg config "Creating PHP-FPM pool..."
 
+  # Validate FPM values
+  if [[ ! "${PM_MAX_CHILDREN}" =~ ^[0-9]+$ ]]; then
+    msg error "Invalid pm.max_children value: ${PM_MAX_CHILDREN}"
+    return 1
+  fi
+  if [[ ! "${PM_START_SERVERS}" =~ ^[0-9]+$ ]]; then
+    msg error "Invalid pm.start_servers value: ${PM_START_SERVERS}"
+    return 1
+  fi
+  if [[ ! "${PM_MIN_SPARE}" =~ ^[0-9]+$ ]]; then
+    msg error "Invalid pm.min_spare_servers value: ${PM_MIN_SPARE}"
+    return 1
+  fi
+  if [[ ! "${PM_MAX_SPARE}" =~ ^[0-9]+$ ]]; then
+    msg error "Invalid pm.max_spare_servers value: ${PM_MAX_SPARE}"
+    return 1
+  fi
+  if [[ ! "${PM_MAX_REQUESTS}" =~ ^[0-9]+$ ]]; then
+    msg error "Invalid pm.max_requests value: ${PM_MAX_REQUESTS}"
+    return 1
+  fi
+  if [[ ! "${REQUEST_TIMEOUT}" =~ ^[0-9]+s$ ]]; then
+    msg error "Invalid request_terminate_timeout: ${REQUEST_TIMEOUT}"
+    return 1
+  fi
+  if [[ ! "${SLOWLOG_TIMEOUT}" =~ ^[0-9]+s$ ]]; then
+    msg error "Invalid slowlog_timeout: ${SLOWLOG_TIMEOUT}"
+    return 1
+  fi
+  if [[ ! "${FPM_POOL_NAME}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    msg error "Invalid pool name: ${FPM_POOL_NAME}"
+    return 1
+  fi
+  if [[ ! "${FPM_USER}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    msg error "Invalid FPM user: ${FPM_USER}"
+    return 1
+  fi
+
   local pool_dir="/etc/php/${PHP_VERSION}/fpm/pool.d"
   local pool_file="${pool_dir}/${FPM_POOL_NAME}.conf"
   local log_dir="/var/log/php${PHP_VERSION}-fpm"

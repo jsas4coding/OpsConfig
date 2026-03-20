@@ -11,6 +11,14 @@ set -euo pipefail
 readonly OPSCONFIG_VERSION="3.0.0"
 
 # =============================================================================
+# CLEANUP
+# =============================================================================
+
+CLEANUP_FILES=()
+cleanup() { rm -f "${CLEANUP_FILES[@]}"; }
+trap cleanup EXIT INT TERM HUP
+
+# =============================================================================
 # COLORS AND ICONS
 # =============================================================================
 
@@ -85,6 +93,11 @@ DEFAULT_PYTHON_PACKAGES="neovim tasklib pynvim requests black"
 
 load_config() {
   if [[ -f "${CONFIG_FILE}" ]]; then
+    # Validate config contains only safe KEY="value" lines before sourcing
+    if grep -qvE '^\s*#|^\s*$|^[A-Z_]+="[^"]*"$' "${CONFIG_FILE}"; then
+      msg warning "Config file contains unexpected content, skipping load"
+      return 1
+    fi
     # shellcheck disable=SC1090
     source "${CONFIG_FILE}"
     msg info "Configuration loaded from ${CONFIG_FILE}"
@@ -127,7 +140,7 @@ INSTALL_PYTHON_ENV="${INSTALL_PYTHON_ENV}"
 PYTHON_PACKAGES="${PYTHON_PACKAGES}"
 EOF
 
-  chmod 644 "${CONFIG_FILE}"
+  chmod 600 "${CONFIG_FILE}"
   msg success "Configuration saved to ${CONFIG_FILE}"
 
   # Maintain backwards compatibility with .php file
@@ -239,11 +252,13 @@ install_system_packages() {
 
   msg info "Installing required packages..."
 
+  sudo apt-get update -y
+
   # Core development tools
-  sudo apt install -y git curl wget jq stow ripgrep perl ruby-full build-essential clang python3-venv whiptail
+  sudo apt-get install -y git curl wget jq stow ripgrep perl ruby-full build-essential clang python3-venv whiptail
 
   # Server utilities
-  sudo apt install -y htop ncdu tree tmux fd-find unzip
+  sudo apt-get install -y htop ncdu tree tmux fd-find unzip
 }
 
 install_neovim() {
@@ -267,18 +282,32 @@ install_neovim() {
   esac
 
   local nvim_url="https://github.com/neovim/neovim/releases/latest/download/nvim-linux-${nvim_arch}.tar.gz"
+  local nvim_checksum_url="${nvim_url}.sha256sum"
   local nvim_dest="/opt/nvim"
   local nvim_tar="nvim-linux-${nvim_arch}.tar.gz"
   local nvim_tmp="/opt/nvim-linux-${nvim_arch}"
   local env_file="/etc/environment"
   local nvim_path="/opt/nvim/bin"
   local scripts_dir="/var/scripts"
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
 
-  curl -LO "${nvim_url}"
+  msg download "Downloading Neovim..."
+  curl -fsSL --proto '=https' --tlsv1.2 -o "${tmp_dir}/${nvim_tar}" "${nvim_url}"
+  CLEANUP_FILES+=("${tmp_dir}/${nvim_tar}")
+
+  # Verify checksum
+  if curl -fsSL --proto '=https' --tlsv1.2 -o "${tmp_dir}/${nvim_tar}.sha256sum" "${nvim_checksum_url}" 2>/dev/null; then
+    msg info "Verifying Neovim checksum..."
+    (cd "${tmp_dir}" && sha256sum -c "${nvim_tar}.sha256sum")
+  else
+    msg warning "Checksum file not available, skipping verification"
+  fi
+
   sudo rm -rf "${nvim_dest}"
-  sudo tar -C /opt -xzf "${nvim_tar}"
+  sudo tar -C /opt -xzf "${tmp_dir}/${nvim_tar}"
   sudo mv "${nvim_tmp}" "${nvim_dest}"
-  sudo rm -rf "${nvim_tar}"
+  rm -rf "${tmp_dir}"
 
   /opt/nvim/bin/nvim --version
 
@@ -350,6 +379,15 @@ install_python_env() {
   # shellcheck disable=SC1091
   source "${NPYTHON_DIR}/bin/activate"
 
+  # Validate package names before installing
+  for pkg in ${PYTHON_PACKAGES}; do
+    if [[ ! "${pkg}" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
+      msg error "Invalid Python package name: ${pkg}"
+      deactivate
+      return 1
+    fi
+  done
+
   msg info "Installing Python packages: ${PYTHON_PACKAGES}"
   python -m ensurepip --upgrade
   pip install --upgrade pip
@@ -381,10 +419,12 @@ install_node() {
         ;;
     esac
     local fnm_archive="fnm-${fnm_arch}.zip"
-    curl -fsSL "https://github.com/Schniz/fnm/releases/latest/download/${fnm_archive}" -o "/tmp/${fnm_archive}"
-    unzip -o "/tmp/${fnm_archive}" -d "${fnm_dir}"
+    local fnm_tmp
+    fnm_tmp="$(mktemp -d)"
+    curl -fsSL --proto '=https' --tlsv1.2 "https://github.com/Schniz/fnm/releases/latest/download/${fnm_archive}" -o "${fnm_tmp}/${fnm_archive}"
+    unzip -o "${fnm_tmp}/${fnm_archive}" -d "${fnm_dir}"
     chmod +x "${fnm_dir}/fnm"
-    rm -f "/tmp/${fnm_archive}"
+    rm -rf "${fnm_tmp}"
   fi
 
   export PATH="${fnm_dir}:${PATH}"
@@ -434,6 +474,10 @@ install_fonts() {
   mkdir -p "${font_dir}"
 
   for font_name in ${FONTS}; do
+    if [[ ! "${font_name}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+      msg error "Invalid font name: ${font_name}"
+      continue
+    fi
     local font_url="https://github.com/ryanoasis/nerd-fonts/releases/latest/download/${font_name}.zip"
     local temp_dir
     temp_dir="$(mktemp -d)"
@@ -510,10 +554,8 @@ setup_repository() {
 
   msg git "Applying stow to OpsConfig repository..."
 
-  cd "${OPSCONFIG_REPO}" || exit
-  stow bash
-  stow nvim
-  cd - > /dev/null
+  stow --dir="${OPSCONFIG_REPO}" --target="${HOME}" bash
+  stow --dir="${OPSCONFIG_REPO}" --target="${HOME}" nvim
 }
 
 # =============================================================================
