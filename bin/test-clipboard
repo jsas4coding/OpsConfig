@@ -1,0 +1,260 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# OpsConfig Clipboard Test Script
+# Tests clipboard functionality in various scenarios
+
+readonly SCRIPT_NAME="$(basename "${0}")"
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Colors for output
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[1;33m'
+readonly BLUE='\033[0;34m'
+readonly NC='\033[0m' # No Color
+
+function log_info() {
+  echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+function log_success() {
+  echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+function log_warning() {
+  echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+function log_error() {
+  echo -e "${RED}[ERROR]${NC} $1"
+}
+
+function detect_environment() {
+  echo "=== Environment Detection ==="
+  
+  # SSH Detection
+  if [[ -n "${SSH_CONNECTION:-}" ]] || [[ -n "${SSH_CLIENT:-}" ]] || [[ -n "${SSH_TTY:-}" ]]; then
+    log_info "SSH session detected"
+    export IS_SSH=1
+  else
+    log_info "Local session"
+    export IS_SSH=0
+  fi
+  
+  # TMUX Detection
+  if [[ -n "${TMUX:-}" ]]; then
+    log_info "TMUX session detected"
+    export IS_TMUX=1
+  else
+    log_info "No TMUX session"
+    export IS_TMUX=0
+  fi
+  
+  # Terminal Detection
+  log_info "Terminal: ${TERM:-unknown}"
+  log_info "Terminal Program: ${TERM_PROGRAM:-unknown}"
+  
+  echo
+}
+
+function test_osc52_support() {
+  echo "=== OSC52 Support Test ==="
+  
+  local test_content="OpsConfig OSC52 Test - $(date)"
+  local base64_content
+  base64_content=$(printf '%s' "$test_content" | base64 | tr -d '\r\n')
+  
+  log_info "Testing OSC52 sequence..."
+  
+  if [[ $IS_TMUX -eq 1 ]]; then
+    # TMUX passthrough
+    printf '\033Ptmux;\033\033]52;c;%s\a\033\\' "$base64_content" >&2
+    log_info "Sent OSC52 sequence through TMUX"
+  else
+    # Direct OSC52
+    printf '\033]52;c;%s\a' "$base64_content" >&2
+    log_info "Sent direct OSC52 sequence"
+  fi
+  
+  echo
+  log_warning "Please check if this text was copied to your system clipboard:"
+  echo "  $test_content"
+  echo
+  
+  read -p "Was the text copied successfully? (y/n): " -n 1 -r
+  echo
+  
+  if [[ $REPLY =~ ^[Yy]$ ]]; then
+    log_success "OSC52 clipboard working!"
+    return 0
+  else
+    log_error "OSC52 clipboard not working"
+    return 1
+  fi
+}
+
+function test_system_clipboard() {
+  echo "=== System Clipboard Test ==="
+  
+  local test_content="OpsConfig System Clipboard Test - $(date)"
+  local clipboard_success=0
+  
+  # Try different clipboard tools
+  if command -v xclip &> /dev/null; then
+    log_info "Testing xclip..."
+    if printf '%s' "$test_content" | xclip -in -selection clipboard 2>/dev/null; then
+      log_success "xclip working"
+      clipboard_success=1
+    else
+      log_warning "xclip failed"
+    fi
+  fi
+  
+  if command -v pbcopy &> /dev/null; then
+    log_info "Testing pbcopy..."
+    if printf '%s' "$test_content" | pbcopy 2>/dev/null; then
+      log_success "pbcopy working"
+      clipboard_success=1
+    else
+      log_warning "pbcopy failed"
+    fi
+  fi
+  
+  if [[ $clipboard_success -eq 0 ]]; then
+    log_warning "No system clipboard tools available"
+  fi
+  
+  echo
+}
+
+function test_neovim_clipboard() {
+  echo "=== Neovim Clipboard Test ==="
+  
+  if ! command -v nvim &> /dev/null; then
+    log_error "Neovim not found"
+    return 1
+  fi
+  
+  log_info "Testing Neovim clipboard configuration..."
+  
+  # Create temporary test file
+  local test_file
+  test_file=$(mktemp)
+  echo "Test content for Neovim clipboard - $(date)" > "$test_file"
+  
+  # Test Neovim clipboard
+  nvim --headless -c "edit $test_file" -c "normal! ggVGy" -c "q!" 2>/dev/null || {
+    log_error "Neovim clipboard test failed"
+    rm -f "$test_file"
+    return 1
+  }
+  
+  log_success "Neovim clipboard test completed"
+  log_info "Check if content was copied to system clipboard"
+  
+  rm -f "$test_file"
+  echo
+}
+
+function test_tmux_clipboard() {
+  if [[ $IS_TMUX -eq 0 ]]; then
+    log_warning "Not in TMUX session, skipping TMUX clipboard test"
+    return 0
+  fi
+  
+  echo "=== TMUX Clipboard Test ==="
+  
+  log_info "Testing TMUX clipboard configuration..."
+  
+  # Test tmux clipboard settings
+  local clipboard_setting
+  clipboard_setting=$(tmux show-options -g set-clipboard 2>/dev/null | cut -d' ' -f2 || echo "off")
+  log_info "TMUX set-clipboard: $clipboard_setting"
+  
+  local passthrough_setting
+  passthrough_setting=$(tmux show-options -g allow-passthrough 2>/dev/null | cut -d' ' -f2 || echo "off")
+  log_info "TMUX allow-passthrough: $passthrough_setting"
+  
+  # Test tmux copy function
+  if declare -f tmux-copy &> /dev/null; then
+    log_info "Testing tmux-copy function..."
+    echo "TMUX copy test - $(date)" | tmux-copy
+    log_success "tmux-copy function executed"
+  else
+    log_warning "tmux-copy function not available"
+  fi
+  
+  echo
+}
+
+function show_configuration() {
+  echo "=== Current Configuration ==="
+  
+  # Neovim clipboard setting
+  if command -v nvim &> /dev/null; then
+    local nvim_clipboard
+    nvim_clipboard=$(nvim --headless -c "echo &clipboard" -c "q!" 2>/dev/null || echo "unknown")
+    log_info "Neovim clipboard setting: $nvim_clipboard"
+  fi
+  
+  # Check for OSC52 plugin
+  if [[ -f "$HOME/.config/nvim/lua/opsconfig/plugins/nvim-osc52.lua" ]]; then
+    log_success "OSC52 plugin found"
+  else
+    log_warning "OSC52 plugin not found"
+  fi
+  
+  # Check TMUX config
+  if [[ -f "$HOME/.tmux.conf" ]]; then
+    log_success "TMUX config found"
+  else
+    log_warning "TMUX config not found"
+  fi
+  
+  echo
+}
+
+function show_recommendations() {
+  echo "=== Recommendations ==="
+  
+  if [[ $IS_SSH -eq 1 ]]; then
+    log_info "SSH Session Recommendations:"
+    echo "  - Ensure your terminal supports OSC52 sequences"
+    echo "  - For iTerm2: Enable 'Applications in terminal may access clipboard'"
+    echo "  - For WezTerm: OSC52 is enabled by default"
+    echo "  - For Kitty: Add 'clipboard_control write-clipboard write-primary' to config"
+  fi
+  
+  if [[ $IS_TMUX -eq 1 ]]; then
+    log_info "TMUX Session Recommendations:"
+    echo "  - Ensure 'set-clipboard on' in TMUX config"
+    echo "  - Ensure 'allow-passthrough on' in TMUX config"
+    echo "  - Use TMUX 3.2 or later for best OSC52 support"
+  fi
+  
+  echo "  - Use ':OSC52Copy' command in Neovim for manual copying"
+  echo "  - Use '<leader>c' in visual mode for OSC52 copy"
+  echo "  - Use 'tclip' command in bash for manual clipboard operations"
+  echo
+}
+
+function main() {
+  echo "OpsConfig Clipboard Functionality Test"
+  echo "======================================"
+  echo
+  
+  detect_environment
+  show_configuration
+  test_system_clipboard
+  test_osc52_support
+  test_neovim_clipboard
+  test_tmux_clipboard
+  show_recommendations
+  
+  log_info "Clipboard testing completed!"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi

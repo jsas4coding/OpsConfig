@@ -280,7 +280,7 @@ install_neovim() {
   # Install Neovim wrapper script
   msg info "Installing Neovim wrapper script..."
   sudo mkdir -p "${scripts_dir}"
-  sudo cp "${OPSCONFIG_REPO}/scripts/neovim" "${scripts_dir}/neovim"
+  sudo cp "${OPSCONFIG_REPO}/bin/neovim" "${scripts_dir}/neovim"
   sudo chmod +x "${scripts_dir}/neovim"
 
   if ! grep -qE "^PATH=.*${scripts_dir}" "${env_file}"; then

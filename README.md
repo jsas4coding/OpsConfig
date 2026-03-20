@@ -69,7 +69,7 @@ and power users who rely heavily on terminal and Neovim workflows.
 ## Installation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/install | bash
+curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/bin/install | bash
 ```
 
 ### What Gets Installed
@@ -88,13 +88,13 @@ curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/install 
 
 ```bash
 # Standard installation (interactive wizard)
-curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/install | bash
+curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/bin/install | bash
 
 # Force Python environment rebuild
-curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/install | bash -s -- --force
+curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/bin/install | bash -s -- --force
 
 # Skip configuration wizard (use existing config)
-curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/install | bash -s -- --no-wizard
+curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/bin/install | bash -s -- --no-wizard
 ```
 
 ### Configuration File
@@ -118,13 +118,13 @@ If you're migrating from an existing NVM installation:
 
 ```bash
 # Preview migration (dry run)
-~/.opsconfig/upgrade-node-manager --dry-run
+~/.opsconfig/bin/upgrade-node-manager --dry-run
 
 # Full migration
-~/.opsconfig/upgrade-node-manager
+~/.opsconfig/bin/upgrade-node-manager
 
 # Keep NVM after migration
-~/.opsconfig/upgrade-node-manager --keep-nvm
+~/.opsconfig/bin/upgrade-node-manager --keep-nvm
 ```
 
 The migration script:
@@ -141,10 +141,10 @@ Install and configure PHP with FPM:
 
 ```bash
 # Install PHP 8.4 with interactive wizard
-sudo ~/.opsconfig/install-php 8.4
+sudo ~/.opsconfig/bin/install-php 8.4
 
 # Install with default settings
-sudo ~/.opsconfig/install-php 8.3 --no-wizard
+sudo ~/.opsconfig/bin/install-php 8.3 --no-wizard
 ```
 
 The script installs:
@@ -212,9 +212,13 @@ opsconfig/
 │       │   │   └── ...            # Other plugins
 │       │   └── behaviors/         # Terminal integrations
 │       └── lazy.lua               # Plugin manager bootstrap
-├── scripts/                       # Utility scripts
-│   └── neovim                     # Neovim wrapper with Python env
-├── install                        # Installation script
+├── bin/                           # Scripts and utilities
+│   ├── install                    # Installation script
+│   ├── install-php                # PHP installation script
+│   ├── update                     # Update script
+│   ├── upgrade-node-manager       # NVM to fnm migration
+│   ├── neovim                     # Neovim wrapper with Python env
+│   └── test-clipboard             # Clipboard integration test
 ├── LICENSE                        # MIT License
 └── SECURITY.md                    # Security policy
 ```

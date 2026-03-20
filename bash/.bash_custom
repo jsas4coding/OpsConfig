@@ -65,7 +65,7 @@ alias q='exit'
 # =============================================================================
 
 update_system() {
-  local update_script="${HOME}/.opsconfig/update"
+  local update_script="${HOME}/.opsconfig/bin/update"
 
   if [[ -x "${update_script}" ]]; then
     "${update_script}" "$@"

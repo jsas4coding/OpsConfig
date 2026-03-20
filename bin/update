@@ -50,7 +50,7 @@ msg() {
 
 CONFIG_DIR="${HOME}/.config/opsconfig"
 CONFIG_FILE="${CONFIG_DIR}/config"
-OPSCONFIG_REPO="https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/install"
+OPSCONFIG_REPO="https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/bin/install"
 
 # =============================================================================
 # HOOK EXECUTION

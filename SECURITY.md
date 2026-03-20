@@ -79,7 +79,7 @@ Configuration files stored in `~/.config/opsconfig/`:
 2. **Review** the install script:
 
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/install | less
+   curl -fsSL https://raw.githubusercontent.com/jsas4coding/OpsConfig/main/bin/install | less
    ```
 
 3. **Test** in a non-production environment first
