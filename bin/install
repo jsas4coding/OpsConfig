@@ -13,7 +13,7 @@ IFS=$'\n\t'
 # COMMON LIBRARY (standalone - no external dependencies)
 # =============================================================================
 
-readonly OPSCONFIG_VERSION="3.0.1"
+readonly OPSCONFIG_VERSION="3.0.3"
 
 # Colors
 readonly RED="\e[31m"
